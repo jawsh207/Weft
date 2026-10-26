@@ -1,8 +1,8 @@
 # Every dependency here is Apache 2.0 (AndroidX / Kotlin). Keep it that way:
 # no Google Play Services, Firebase, or closed-source libraries.
 #
-# These are known-good pinned versions. Android Studio will offer newer ones
-# (e.g. Compose 1.12.x, Material3 1.5.x) — upgrading is fine.
+# Pinned versions. Material3 1.5 is required: the Expressive APIs (MaterialExpressiveTheme,
+# MotionScheme, LoadingIndicator) are internal in 1.4. Upgrading is fine.
 
 [versions]
 agp = "8.13.0"
@@ -11,8 +11,8 @@ coreKtx = "1.16.0"
 activityCompose = "1.10.1"
 lifecycle = "2.9.2"
 savedstate = "1.3.0"
-compose = "1.9.0"
-material3 = "1.4.0"
+compose = "1.12.1"
+material3 = "1.5.0-beta01"
 junit = "4.13.2"
 
 [libraries]
