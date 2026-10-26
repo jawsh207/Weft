@@ -59,7 +59,7 @@ jobs:
             # Already-released versions whose notes changed: refresh their release pages.
             REFRESH=$(for f in $FILES; do
                         v=$(basename "$f" .md)
-                        git rev-parse -q --verify "refs/tags/$v" >/dev/null && echo "$v"
+                        if git rev-parse -q --verify "refs/tags/$v" >/dev/null; then echo "$v"; fi
                       done)
             # Newest version whose notes were added or changed in this push and isn't tagged yet.
             TAG=$(for f in $FILES; do
