@@ -1,10 +1,11 @@
 package app.weft.keyboard.emoji
 
-/** One emoji as the picker shows it, plus its single-tone skin variants. */
+/** One emoji as the picker shows it, plus its single-tone skin variants and search keywords. */
 data class Emoji(
     val base: String,
     val name: String,
     val variants: List<String> = emptyList(),
+    val keywords: List<String> = emptyList(),
 )
 
 data class EmojiGroup(val name: String, val emoji: List<Emoji>)
@@ -30,9 +31,11 @@ class EmojiCatalog(val groups: List<EmojiGroup>) {
     fun find(text: String): Emoji? = byText[text]
 
     /**
-     * Name search. Every word typed must start a word of the emoji's name
-     * ("thu up" finds "thumbs up"). Whole-word matches rank above partial ones,
-     * and shorter names first, so the plain emoji leads ("heart" → ❤️ before 💘).
+     * Search by name and keyword. Every word typed must start a word of the
+     * emoji's name or keywords ("thu up" finds "thumbs up", "lol" finds 😂).
+     * Ranking: exact name, whole words in the name, an exact keyword, name
+     * prefix, then anything else; shorter names first within each, so the plain
+     * emoji leads ("heart" → ❤️ before 💘).
      */
     fun search(query: String, limit: Int = 60): List<Emoji> {
         val q = query.trim().lowercase()
@@ -41,13 +44,16 @@ class EmojiCatalog(val groups: List<EmojiGroup>) {
         return all.asSequence()
             .mapNotNull { e ->
                 val name = e.name.lowercase()
-                val words = name.split(WORD_BREAK)
+                val nameWords = name.split(WORD_BREAK)
+                val keywords = e.keywords.map { it.lowercase() }
+                val words = nameWords + keywords.flatMap { it.split(WORD_BREAK) }
                 if (!tokens.all { t -> words.any { it.startsWith(t) } }) return@mapNotNull null
                 val rank = when {
                     name == q -> 0
-                    tokens.all { t -> t in words } -> 1
-                    name.startsWith(q) -> 2
-                    else -> 3
+                    tokens.all { t -> t in nameWords } -> 1
+                    q in keywords -> 2
+                    name.startsWith(q) -> 3
+                    else -> 4
                 }
                 Triple(rank, name.length, e)
             }
@@ -88,7 +94,11 @@ class EmojiCatalog(val groups: List<EmojiGroup>) {
                         val variants = parts.getOrNull(2).orEmpty()
                             .split(' ')
                             .filter { it.isNotEmpty() && isSupported(it) }
-                        current += Emoji(base, parts[1], variants)
+                        val keywords = parts.getOrNull(3).orEmpty()
+                            .split('|')
+                            .map { it.trim() }
+                            .filter { it.isNotEmpty() }
+                        current += Emoji(base, parts[1], variants, keywords)
                     }
                 }
             }

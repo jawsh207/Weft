@@ -26,7 +26,8 @@ This is the starter scaffold. Working now:
 - Voice input through the system speech engine, with live partial results
 - **Emoji picker** with every Unicode emoji, drawn in the phone's own emoji font:
   category tabs, recently used, skin tones on long-press (remembered per
-  emoji), and search by name. Emoji the font can't draw are hidden
+  emoji), and search by name or keyword ("joy", "lol", "us" for 🇺🇸). Emoji
+  the font can't draw are hidden
 - Setup screen: enable keyboard, switch to it, grant the mic, test field
 - **Suggestions:** typo correction that knows which keys are next to each other,
   word completions, and next-word predictions, in a three-slot strip
@@ -77,8 +78,7 @@ app/src/main/java/app/weft/keyboard/
 
 1. ~~Prediction~~ — done. Next: long-press a suggestion to forget a learned word,
    learn word pairs from the user's own typing.
-2. ~~Full emoji picker~~ — done. Next: search by keyword as well as name
-   (Unicode CLDR annotations, so "lol" finds 😂).
+2. ~~Full emoji picker~~ — done, with CLDR keyword search.
 3. **Long-press alternates** — accented letters and key popups.
 4. **Settings** — haptics, key height, on-device voice preference, number row.
 5. **Large screens** — floating, one-handed and split layouts for tablets and foldables.
@@ -90,8 +90,10 @@ app/src/main/java/app/weft/keyboard/
 - Only OSI-licensed dependencies. AndroidX and Kotlin (Apache 2.0) are fine.
 - No Google Play Services, Firebase, analytics or proprietary libraries.
 - No bundled closed speech or gesture engines.
-- Emoji are never bundled: they're drawn with the phone's font. The list comes
-  from Unicode's emoji data via [tools/emojigen](tools/emojigen/build_emoji.py).
+- Emoji are never bundled: they're drawn with the phone's font. The list and
+  keywords come from Unicode's emoji data and CLDR (Unicode License v3, shipped
+  as `assets/emoji/LICENSE-Unicode.txt`) via [tools/emojigen](tools/emojigen/build_emoji.py),
+  plus Weft's own [extra_keywords.tsv](tools/emojigen/extra_keywords.tsv).
 - Dictionary data must come from openly licensed sources (see
   [tools/dictgen/README.md](tools/dictgen/README.md)), and every source is
   credited in the app.

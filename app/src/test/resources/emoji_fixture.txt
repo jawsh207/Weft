@@ -1,17 +1,18 @@
-# Weft emoji list, generated from Unicode emoji-test.txt (version 16.0).
-# Source: https://unicode.org/Public/emoji/ - Unicode License v3 (Unicode-3.0).
+# Weft emoji list. Unicode emoji 16.0.
+# Data: Unicode emoji-test.txt; Unicode CLDR annotations (en); Weft extra_keywords.tsv
+# Unicode data is under the Unicode License v3 (Unicode-3.0); see LICENSE-Unicode.txt.
 # Regenerate with tools/emojigen/build_emoji.py; do not edit by hand.
 @Smileys & Emotion
-😀	grinning face	
-😂	face with tears of joy	
-☺️	smiling face	
-❤️	red heart	
+😀	grinning face		
+😂	face with tears of joy		face | joy | laugh | tear | lol
+☺️	smiling face		
+❤️	red heart		emotion | heart | love
 @People & Body
-👋	waving hand	👋🏻 👋🏼 👋🏽 👋🏾 👋🏿
-☝️	index pointing up	☝🏻 ☝🏿
-👍	thumbs up	👍🏽
-🧑‍🤝‍🧑	people holding hands	🧑🏻‍🤝‍🧑🏻
+👋	waving hand	👋🏻 👋🏼 👋🏽 👋🏾 👋🏿	
+☝️	index pointing up	☝🏻 ☝🏿	
+👍	thumbs up	👍🏽	+1 | hand | thumb | up
+🧑‍🤝‍🧑	people holding hands	🧑🏻‍🤝‍🧑🏻	
 @Food & Drink
-🍕	pizza	
+🍕	pizza		cheese | slice
 @Flags
-🇨🇦	flag: Canada	
+🇨🇦	flag: Canada		ca

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE ldml SYSTEM "../../common/dtd/ldml.dtd">
+<!-- Sample in CLDR annotations format, for tests. -->
+<ldml>
+	<identity>
+		<version number="$Revision$"/>
+		<language type="en"/>
+	</identity>
+	<annotations>
+		<annotation cp="😂">face | joy | laugh | tear</annotation>
+		<annotation cp="😂" type="tts">face with tears of joy</annotation>
+		<annotation cp="❤">emotion | heart | love | red heart</annotation>
+		<annotation cp="❤" type="tts">red heart</annotation>
+		<annotation cp="👍">+1 | hand | thumb | thumbs up | up</annotation>
+		<annotation cp="🍕">cheese | pizza | slice</annotation>
+	</annotations>
+</ldml>

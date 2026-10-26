@@ -1,0 +1,70 @@
+# Weft's own emoji search keywords, for everyday words CLDR doesn't include.
+# Part of Weft (GPL-3.0). Format: keyword<TAB>emoji, space separated, best first.
+lol	😂 🤣 😆
+lmao	🤣 😂
+rofl	🤣
+haha	😂 😆 😄
+omg	😱 😮 😲
+wow	😮 🤩 😲
+yay	🎉 🥳 🙌
+love	❤️ 😍 🥰 😘
+luv	❤️ 😍
+xoxo	😘 💋 ❤️
+hug	🤗 🫂
+kiss	😘 💋
+happy	😀 😊 😄
+sad	😢 😭 😞
+cry	😭 😢
+angry	😠 😡 🤬
+mad	😠 😡
+cool	😎 🆒
+ok	👌 👍 🆗
+okay	👌 👍
+yes	👍 ✅ 🙌
+no	👎 🙅 ❌
+thanks	🙏 😊
+thx	🙏
+ty	🙏
+pls	🥺 🙏
+please	🥺 🙏
+sorry	😔 🙏
+think	🤔
+hmm	🤔
+idk	🤷
+shrug	🤷
+facepalm	🤦
+smh	🤦 🙄
+eyeroll	🙄
+eyes	👀
+sus	🤨 👀
+dead	💀 😵
+rip	🪦 💀 🕊️
+party	🎉 🥳 🎊
+bday	🎂 🎉 🥳
+birthday	🎂 🎉 🥳 🎁
+congrats	🎉 🥳 👏
+gg	🎮 🤝
+lit	🔥
+hot	🔥 🥵
+cold	🥶 ❄️
+sleep	😴 💤
+tired	😴 😩 🥱
+sick	🤒 🤢 🤧
+money	💰 💵 🤑
+coffee	☕
+beer	🍺 🍻
+wine	🍷
+food	🍔 🍕 🍟
+hi	👋 😊
+hello	👋 😊
+bye	👋 😘
+gn	😴 🌙
+gm	☀️ 😊
+nice	👍 👌 😎
+perfect	👌 💯
+100	💯
+strong	💪
+pray	🙏
+clap	👏
+flex	💪
+win	🏆 🥇 🎉

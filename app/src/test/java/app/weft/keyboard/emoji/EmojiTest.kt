@@ -7,10 +7,12 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * Fixture built from tools/emojigen/testdata/emoji-test-sample.txt:
+ * Fixture built from tools/emojigen/testdata:
  *   python3 tools/emojigen/build_emoji.py \
  *     --input tools/emojigen/testdata/emoji-test-sample.txt \
- *     --out app/src/test/resources/emoji_fixture.txt
+ *     --annotations tools/emojigen/testdata/annotations-sample.xml \
+ *     --extra-keywords tools/emojigen/testdata/extra_keywords-sample.tsv \
+ *     --out app/src/test/resources/emoji_fixture.txt --no-license
  */
 class EmojiTest {
 
@@ -58,6 +60,18 @@ class EmojiTest {
         assertTrue(catalog.search("face").map { it.base }.containsAll(listOf("😀", "😂", "☺️")))
         assertTrue(catalog.search("zzz").isEmpty())
         assertTrue(catalog.search("  ").isEmpty())
+    }
+
+    @Test
+    fun searchesByKeyword() {
+        assertEquals("😂", catalog.search("joy").first().base)
+        assertEquals("😂", catalog.search("lol").first().base) // Weft's own keywords
+        assertEquals("❤️", catalog.search("love").first().base)
+        assertEquals("👍", catalog.search("+1").first().base)
+        assertEquals("🇨🇦", catalog.search("ca").first().base) // flag region code
+        assertEquals("🍕", catalog.search("cheese").first().base)
+        // A name match still outranks a keyword-only match.
+        assertEquals("👍", catalog.search("thumbs").first().base)
     }
 
     @Test
