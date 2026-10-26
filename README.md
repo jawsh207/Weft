@@ -44,9 +44,44 @@ This is the starter scaffold. Working now:
 
 ## Download
 
-Every push to `main` builds a debug APK. Open the latest successful
+Signed releases are on the [Releases](https://github.com/jawsh207/Weft/releases)
+page. Each one installs as an update over the last.
+
+Every push to `main` also builds a test APK: open the latest successful
 [Build run](https://github.com/jawsh207/Weft/actions/workflows/build.yml) and
-download **weft-debug** under Artifacts (you need to be signed in to GitHub).
+download the **Weft-…** artifact (you need to be signed in to GitHub). Test
+builds are signed with the release key too, so they update in place.
+
+## Releasing
+
+Add `release-notes/vX.Y.Z.md` (a short summary: New / Improved / Fixed) and
+push it to `main`. The Build run for that commit runs the tests, builds the
+signed, R8-optimized APK, tags the commit `vX.Y.Z` and publishes the GitHub
+Release with the notes and every commit since the previous tag. The tag is
+the version name; the version code is the Actions run number.
+
+### Signing
+
+CI needs four repository secrets (*Settings → Secrets and variables → Actions*).
+Without them builds still compile and upload a debug APK, but releases are
+refused.
+
+| Secret | Value |
+| --- | --- |
+| `WEFT_KEYSTORE_BASE64` | the keystore file, base64-encoded on one line |
+| `WEFT_KEYSTORE_PASSWORD` | keystore password |
+| `WEFT_KEY_ALIAS` | `weft` |
+| `WEFT_KEY_PASSWORD` | key password (same as the keystore password for PKCS12) |
+
+Keep the keystore and its password backed up privately: Android only accepts
+updates signed with the same key, and anyone holding it can sign APKs that
+install over Weft. To make one:
+
+```sh
+keytool -genkeypair -keystore weft.jks -storetype PKCS12 -alias weft \
+  -keyalg RSA -keysize 4096 -validity 10000 -dname "CN=Weft"
+base64 -w0 weft.jks   # on macOS: base64 -i weft.jks
+```
 
 ## Building
 
@@ -107,4 +142,10 @@ app/src/main/java/app/weft/keyboard/
 
 ## License
 
-GPL-3.0-only. See [LICENSE](LICENSE).
+Weft is free software: you can redistribute it and/or modify it under the
+terms of the GNU General Public License as published by the Free Software
+Foundation, version 3 (GPL-3.0-only). It is distributed in the hope that it
+will be useful, but WITHOUT ANY WARRANTY. See [LICENSE](LICENSE) for the full
+text.
+
+Copyright (C) 2026 jawsh207

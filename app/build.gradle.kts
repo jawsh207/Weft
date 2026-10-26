@@ -14,12 +14,29 @@ android {
         applicationId = "app.weft.keyboard"
         minSdk = 36 // Android 16+
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        // CI passes the Actions run number and the release tag, so every build
+        // installs as an update over the one before it.
+        versionCode = System.getenv("WEFT_VERSION_CODE")?.toIntOrNull() ?: 1
+        versionName = System.getenv("WEFT_VERSION_NAME")?.removePrefix("v") ?: "0.1.0-dev"
+    }
+
+    // Release signing comes from the environment (GitHub secrets in CI; see README › Signing).
+    val keystorePath = System.getenv("WEFT_KEYSTORE_FILE")
+    if (keystorePath != null) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("WEFT_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("WEFT_KEY_ALIAS")
+                keyPassword = System.getenv("WEFT_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
+            signingConfig = signingConfigs.findByName("release")
+            // R8: shrink, optimize and obfuscate; drop unused resources.
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(

@@ -1,29 +1,87 @@
 name: Build
 
+# Every push to main runs the tests and builds an optimized (R8) release APK.
+# With the signing secrets set, that APK is signed and uploaded as an artifact
+# (an updatable test build); without them a debug APK is uploaded instead.
+#
+# Releases: push a new release-notes/vX.Y.Z.md to main. That run also creates
+# the vX.Y.Z tag and publishes the GitHub Release with the signed APK.
+# Creating a release on GitHub (which pushes the tag) works too.
+
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
-  # Rebuild after the Dictionary workflow commits a new dictionary
+  # Rebuild after the Dictionary or Emoji data workflow commits new data
   # (pushes made with GITHUB_TOKEN don't trigger workflows on their own).
   workflow_run:
     workflows: [Dictionary, Emoji data]
     types: [completed]
 
 permissions:
-  contents: read
+  contents: write # create tags and releases
 
 concurrency:
   group: build-${{ github.ref }}
-  cancel-in-progress: true
+  # Never cancel a run midway: it may be creating a tag and release.
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
+    env:
+      # versionCode rises with every run, so each APK installs as an update.
+      WEFT_VERSION_CODE: ${{ github.run_number }}
+      HAS_SIGNING: ${{ secrets.WEFT_KEYSTORE_BASE64 != '' }}
+
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # full history and tags, for release notes
+
+      - name: Detect release
+        shell: bash
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          TAG=""; NEW=false
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            TAG="$GITHUB_REF_NAME"   # release created on GitHub; the tag already exists
+          elif [[ "$GITHUB_EVENT_NAME" == push && "$GITHUB_REF" == refs/heads/main ]]; then
+            if [[ -z "$BEFORE" || "$BEFORE" =~ ^0+$ ]] || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+              FILES=$(git ls-files 'release-notes/v*.md')
+            else
+              FILES=$(git diff --name-only --diff-filter=AM "$BEFORE" "$GITHUB_SHA" -- release-notes/)
+            fi
+            # Newest version whose notes were added or changed in this push and isn't tagged yet.
+            TAG=$(for f in $FILES; do
+                    v=$(basename "$f" .md)
+                    [[ "$v" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
+                    git rev-parse -q --verify "refs/tags/$v" >/dev/null && continue
+                    echo "$v"
+                  done | sort -V | tail -1)
+            [[ -n "$TAG" ]] && NEW=true
+          fi
+          {
+            echo "RELEASE_TAG=$TAG"
+            echo "RELEASE_NEW=$NEW"
+            if [[ -n "$TAG" ]]; then
+              echo "WEFT_VERSION_NAME=$TAG"
+            else
+              LAST=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || echo v0.0.0)
+              echo "WEFT_VERSION_NAME=${LAST#v}-ci.$GITHUB_RUN_NUMBER"
+            fi
+          } >> "$GITHUB_ENV"
+          echo "release tag: ${TAG:-none} (new: $NEW)"
+
+      - name: Require signing key for releases
+        if: env.RELEASE_TAG != '' && env.HAS_SIGNING != 'true'
+        run: |
+          echo "::error title=Signing key missing::Add the WEFT_KEYSTORE_BASE64, WEFT_KEYSTORE_PASSWORD, WEFT_KEY_ALIAS and WEFT_KEY_PASSWORD repository secrets (see README › Signing), then re-run this workflow. No tag or release was created."
+          exit 1
 
       - uses: actions/setup-java@v5
         with:
@@ -38,23 +96,41 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - name: Decode signing key
+        if: env.HAS_SIGNING == 'true'
+        run: |
+          echo "${{ secrets.WEFT_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/weft.jks"
+          echo "WEFT_KEYSTORE_FILE=$RUNNER_TEMP/weft.jks" >> "$GITHUB_ENV"
+
       - name: Unit tests
         run: |
           ./gradlew --no-daemon testDebugUnitTest 2>&1 | tee gradle-test.log
           exit ${PIPESTATUS[0]}
 
-      - name: Build debug APK
+      # Optimized (R8, non-debuggable) build. Without the signing secrets it still
+      # compiles and shrinks, so R8 problems show up, but it can't be installed.
+      - name: Build release APK
+        env:
+          WEFT_KEYSTORE_PASSWORD: ${{ secrets.WEFT_KEYSTORE_PASSWORD }}
+          WEFT_KEY_ALIAS: ${{ secrets.WEFT_KEY_ALIAS }}
+          WEFT_KEY_PASSWORD: ${{ secrets.WEFT_KEY_PASSWORD }}
         run: |
-          ./gradlew --no-daemon assembleDebug 2>&1 | tee gradle-assemble.log
+          ./gradlew --no-daemon assembleRelease 2>&1 | tee gradle-release.log
           exit ${PIPESTATUS[0]}
 
-      # Surface compiler and Gradle errors as annotations on the run summary.
+      - name: Build debug APK
+        if: env.HAS_SIGNING != 'true'
+        run: |
+          ./gradlew --no-daemon assembleDebug 2>&1 | tee gradle-debug.log
+          exit ${PIPESTATUS[0]}
+
+      # Surface compiler, Gradle and R8 errors as annotations on the run summary.
       - name: Report build errors
         if: failure()
         run: |
-          for f in gradle-test.log gradle-assemble.log; do
+          for f in gradle-test.log gradle-release.log gradle-debug.log; do
             [ -f "$f" ] || continue
-            grep -E "^e: |error:|What went wrong|Could not |Unresolved|expected:|FAILED|Exception|^> |Dependency |requires|compileSdk|Android Gradle plugin|issues? (was|were) found" "$f" \
+            grep -E "^e: |error:|ERROR:|What went wrong|Could not |Unresolved|Missing class|expected:|FAILED|Exception|^> |Dependency |requires|compileSdk|Android Gradle plugin|issues? (was|were) found" "$f" \
               | grep -vE "^> Task [^ ]+( (UP-TO-DATE|NO-SOURCE|FROM-CACHE|SKIPPED))?$" | head -40 > "$f.errors" || true
             grep -A4 "What went wrong" "$f" | head -10 >> "$f.errors" || true
             python3 - "$f" <<'PY'
@@ -68,13 +144,6 @@ jobs:
           PY
           done
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: weft-debug
-          path: app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
-
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v4
@@ -82,3 +151,66 @@ jobs:
           name: test-reports
           path: app/build/reports/tests/
           if-no-files-found: ignore
+
+      - name: Collect APK
+        run: |
+          mkdir -p out
+          if [ "$HAS_SIGNING" = true ]; then
+            cp app/build/outputs/apk/release/app-release.apk "out/Weft-${WEFT_VERSION_NAME}.apk"
+          else
+            cp app/build/outputs/apk/debug/app-debug.apk "out/Weft-${WEFT_VERSION_NAME}-debug.apk"
+          fi
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Weft-${{ env.WEFT_VERSION_NAME }}
+          path: out/*.apk
+          if-no-files-found: error
+
+      # Only after a successful, signed build: tag this commit.
+      - name: Create release tag
+        if: env.RELEASE_NEW == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$RELEASE_TAG" -m "Weft $RELEASE_TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$RELEASE_TAG"
+
+      - name: Write release notes
+        if: env.RELEASE_TAG != ''
+        run: |
+          git fetch --force --tags origin >/dev/null 2>&1 || true
+          TAG="$RELEASE_TAG"
+          PREV=$(git describe --tags --abbrev=0 --match 'v*' "${TAG}^" 2>/dev/null || true)
+          {
+            if [ -f "release-notes/$TAG.md" ]; then
+              cat "release-notes/$TAG.md"
+              echo
+            fi
+            if [ -n "$PREV" ]; then
+              echo "## Changes"
+              echo
+              git log --no-merges --format='- %s' "$PREV..$TAG"
+              echo
+              echo "**Full changelog:** https://github.com/$GITHUB_REPOSITORY/compare/$PREV...$TAG"
+            fi
+          } > release-notes.md
+          cat release-notes.md
+
+      - name: Publish GitHub Release
+        if: env.RELEASE_TAG != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="$RELEASE_TAG"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            # Created on GitHub: attach the APK, and fill in the notes unless someone wrote some.
+            gh release upload "$TAG" out/*.apk --clobber
+            BODY=$(gh release view "$TAG" --json body -q .body)
+            if [ -z "${BODY//[[:space:]]/}" ]; then
+              gh release edit "$TAG" --title "Weft $TAG" --notes-file release-notes.md
+            fi
+          else
+            gh release create "$TAG" out/*.apk --title "Weft $TAG" --notes-file release-notes.md --verify-tag
+          fi
