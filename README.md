@@ -36,14 +36,21 @@ This is the starter scaffold. Working now:
 - Smart spacing: picking a suggestion adds a space; typing `.` or `,` next
   moves it after the punctuation
 
+## Download
+
+Every push to `main` builds a debug APK. Open the latest successful
+[Build run](https://github.com/jawsh207/Weft/actions/workflows/build.yml) and
+download **weft-debug** under Artifacts (you need to be signed in to GitHub).
+
 ## Building
 
-1. Open the folder in Android Studio (a recent stable release).
+1. Open the folder in Android Studio (a release that supports AGP 9.1).
 2. Let Gradle sync. Android Studio may offer newer dependency versions —
    accepting them is fine.
-3. Build the dictionary: `python3 tools/dictgen/make_dict.py en_US`
-   (see [tools/dictgen/README.md](tools/dictgen/README.md)). Without it the
-   keyboard still works, with learned words only.
+3. The dictionary is built by the Dictionary workflow and committed to
+   `app/src/main/assets/dictionaries/`. To rebuild it locally:
+   `python3 tools/dictgen/make_dict.py en_US` (see
+   [tools/dictgen/README.md](tools/dictgen/README.md)).
 4. Run the `app` configuration on an Android 16+ device or emulator.
 5. Follow the setup screen to enable the keyboard.
 
