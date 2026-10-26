@@ -48,5 +48,5 @@
     <string name="settings_dictionary_words">%1$s · %2$,d words</string>
     <string name="settings_dictionary_sources">Built from these open sources:</string>
     <string name="settings_emoji_title">Emoji</string>
-    <string name="settings_emoji_body">Emoji are drawn with your phone\'s own emoji font. The list, names, skin tones and search keywords come from Unicode\'s emoji data and CLDR (Unicode License v3, included with the app).</string>
+    <string name="settings_emoji_body">Emoji are drawn with your phone\'s own emoji font. The list, names and skin tones come from Unicode\'s emoji data. Search keywords come from Unicode CLDR (Unicode License v3), emojilib and GitHub\'s gemoji shortcodes (MIT). License texts are included with the app.</string>
 </resources>

@@ -11,6 +11,8 @@ import org.junit.Test
  *   python3 tools/emojigen/build_emoji.py \
  *     --input tools/emojigen/testdata/emoji-test-sample.txt \
  *     --annotations tools/emojigen/testdata/annotations-sample.xml \
+ *     --emojilib tools/emojigen/testdata/emojilib-sample.json \
+ *     --gemoji tools/emojigen/testdata/gemoji-sample.json \
  *     --extra-keywords tools/emojigen/testdata/extra_keywords-sample.tsv \
  *     --out app/src/test/resources/emoji_fixture.txt --no-license
  */
@@ -70,6 +72,12 @@ class EmojiTest {
         assertEquals("👍", catalog.search("+1").first().base)
         assertEquals("🇨🇦", catalog.search("ca").first().base) // flag region code
         assertEquals("🍕", catalog.search("cheese").first().base)
+        // Community keywords (emojilib) and shortcodes (gemoji).
+        assertEquals("😂", catalog.search("haha").first().base)
+        assertEquals("❤️", catalog.search("valentines").first().base)
+        assertEquals("👍", catalog.search("thumbsup").first().base)
+        assertEquals("👍", catalog.search(":thumbsup:").first().base)
+        assertEquals("👍", catalog.search("approve").first().base)
         // Hand-picked keywords keep their listed order.
         assertEquals(listOf("🍕", "❤️"), catalog.search("food").map { it.base })
         // A name match still outranks a CLDR-keyword-only match.

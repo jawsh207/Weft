@@ -6,13 +6,17 @@ Build Weft's emoji list from Unicode data.
     python3 tools/emojigen/build_emoji.py --input emoji-test.txt \\
         --annotations en.xml --annotations en-derived.xml --no-license
 
-Writes app/src/main/assets/emoji/emoji.txt and, next to it, Unicode's license
-text (LICENSE-Unicode.txt), which must ship with the data.
+Writes app/src/main/assets/emoji/emoji.txt and, next to it, the license text
+of every source (LICENSE-*.txt), which their licenses require to ship with it.
 
-Sources, all under the Unicode License v3 (Unicode-3.0, OSI approved):
-  - emoji-test.txt: every emoji, its group, name and skin-tone forms
-  - CLDR annotations (en.xml, annotationsDerived/en.xml): search keywords
-Plus Weft's own extra_keywords.tsv (GPL-3.0) for texting slang like "lol".
+Sources:
+  - Unicode emoji-test.txt: every emoji, its group, name and skin-tone forms
+    (Unicode License v3)
+  - Unicode CLDR annotations (en.xml, annotationsDerived/en.xml): official
+    keywords, available in ~100 languages (Unicode License v3)
+  - emojilib (npm): community keywords in everyday English (MIT)
+  - GitHub gemoji (db/emoji.json): shortcodes like "thumbsup", "joy" (MIT)
+  - Weft's own extra_keywords.tsv (GPL-3.0): ranking for common searches
 
 Only the list is bundled; the emoji are drawn with the phone's own font.
 
@@ -36,7 +40,10 @@ Rules:
 from __future__ import annotations
 
 import argparse
+import io
+import json
 import re
+import tarfile
 import sys
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -51,6 +58,10 @@ EMOJI_TEST_URL = "https://unicode.org/Public/emoji/latest/emoji-test.txt"
 CLDR = "https://raw.githubusercontent.com/unicode-org/cldr/main/common"
 ANNOTATION_URLS = [f"{CLDR}/annotations/en.xml", f"{CLDR}/annotationsDerived/en.xml"]
 LICENSE_URL = "https://www.unicode.org/license.txt"
+EMOJILIB_REGISTRY = "https://registry.npmjs.org/emojilib/latest"
+GEMOJI = "https://raw.githubusercontent.com/github/gemoji/master"
+GEMOJI_URL = f"{GEMOJI}/db/emoji.json"
+GEMOJI_LICENSE_URL = f"{GEMOJI}/LICENSE"
 
 SKIN_TONES = set(range(0x1F3FB, 0x1F400))
 VS16 = 0xFE0F
@@ -119,6 +130,44 @@ def parse_annotations(xml_text: str) -> dict[tuple[int, ...], list[str]]:
     return out
 
 
+def fetch_emojilib() -> tuple[str, str, str]:
+    """Download the latest emojilib npm package: (keywords json, license, version)."""
+    meta = json.loads(fetch(EMOJILIB_REGISTRY))
+    with urllib.request.urlopen(meta["dist"]["tarball"], timeout=120) as r:
+        data = r.read()
+    keywords_json = license_text = None
+    with tarfile.open(fileobj=io.BytesIO(data)) as tar:
+        for m in tar.getmembers():
+            name = m.name.lower()
+            if name.endswith("emoji-en-us.json") and keywords_json is None:
+                keywords_json = tar.extractfile(m).read().decode("utf-8")
+            elif name.rsplit("/", 1)[-1] in ("license", "license.md", "license.txt"):
+                license_text = tar.extractfile(m).read().decode("utf-8")
+    if keywords_json is None:
+        sys.exit("emojilib package has no emoji-en-US.json; its layout may have changed")
+    return keywords_json, license_text or "MIT License (see https://github.com/muan/emojilib)", meta.get("version", "")
+
+
+def parse_emojilib(text: str) -> dict[tuple[int, ...], list[str]]:
+    """emojilib: {"😀": ["grinning_face", "face", "smile", ...]}; underscores become spaces."""
+    out: dict[tuple[int, ...], list[str]] = {}
+    for emoji, words in json.loads(text).items():
+        out.setdefault(key_of(emoji), []).extend(w.replace("_", " ") for w in words if isinstance(w, str))
+    return out
+
+
+def parse_gemoji(text: str) -> dict[tuple[int, ...], list[str]]:
+    """gemoji db/emoji.json: [{"emoji": "👍", "aliases": ["+1", "thumbsup"], "tags": [...]}]."""
+    out: dict[tuple[int, ...], list[str]] = {}
+    for entry in json.loads(text):
+        emoji = entry.get("emoji")
+        if not emoji:
+            continue
+        words = list(entry.get("aliases", [])) + list(entry.get("tags", []))
+        out.setdefault(key_of(emoji), []).extend(w.replace("_", " ") for w in words)
+    return out
+
+
 def read_extra_keywords(path: Path) -> dict[tuple[int, ...], list[str]]:
     """Weft's hand-picked keywords, as "keyword#rank" (rank = position in the line)."""
     out: dict[tuple[int, ...], list[str]] = {}
@@ -174,7 +223,7 @@ def render(version: str, groups, sources: list[str]) -> str:
     out = [
         f"# Weft emoji list. Unicode emoji {version or 'unknown'}.",
         "# Data: " + "; ".join(sources),
-        "# Unicode data is under the Unicode License v3 (Unicode-3.0); see LICENSE-Unicode.txt.",
+        "# Licenses: Unicode data under Unicode-3.0, emojilib and gemoji under MIT; see LICENSE-*.txt.",
         "# Regenerate with tools/emojigen/build_emoji.py; do not edit by hand.",
     ]
     for name, entries in groups:
@@ -193,9 +242,12 @@ def main() -> None:
     p.add_argument("--annotations", action="append",
                    help="Local CLDR annotations XML (repeatable; default: download en + derived)")
     p.add_argument("--no-annotations", action="store_true", help="Skip CLDR keywords")
+    p.add_argument("--emojilib", help="Local emojilib emoji-en-US.json (default: download)")
+    p.add_argument("--gemoji", help="Local gemoji db/emoji.json (default: download)")
+    p.add_argument("--no-community", action="store_true", help="Skip emojilib and gemoji")
     p.add_argument("--extra-keywords", default=str(EXTRA_KEYWORDS))
     p.add_argument("--out", default=str(OUT_DIR / "emoji.txt"))
-    p.add_argument("--no-license", action="store_true", help="Don't download Unicode's license text")
+    p.add_argument("--no-license", action="store_true", help="Don't download license texts")
     args = p.parse_args()
 
     text = Path(args.input).read_text(encoding="utf-8") if args.input else fetch(EMOJI_TEST_URL)
@@ -210,6 +262,23 @@ def main() -> None:
             else [fetch(u) for u in ANNOTATION_URLS]
         keyword_maps += [parse_annotations(x) for x in xmls]
         sources.append("Unicode CLDR annotations (en)")
+
+    licenses = {}
+    if not args.no_community:
+        if args.emojilib:
+            emojilib_json = Path(args.emojilib).read_text(encoding="utf-8")
+            sources.append("emojilib")
+        else:
+            emojilib_json, licenses["emojilib"], version_lib = fetch_emojilib()
+            sources.append(f"emojilib {version_lib}".strip())
+        keyword_maps.append(parse_emojilib(emojilib_json))
+        if args.gemoji:
+            gemoji_json = Path(args.gemoji).read_text(encoding="utf-8")
+        else:
+            gemoji_json = fetch(GEMOJI_URL)
+            licenses["gemoji"] = fetch(GEMOJI_LICENSE_URL)
+        keyword_maps.append(parse_gemoji(gemoji_json))
+        sources.append("GitHub gemoji")
     keywords = add_keywords(by_key, keyword_maps)
     keywords += add_picks(by_key, read_extra_keywords(Path(args.extra_keywords)))
     sources.append("Weft extra_keywords.tsv")
@@ -218,7 +287,9 @@ def main() -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(render(version, groups, sources), encoding="utf-8")
     if not args.no_license:
-        (out.parent / "LICENSE-Unicode.txt").write_text(fetch(LICENSE_URL), encoding="utf-8")
+        licenses["Unicode"] = fetch(LICENSE_URL)
+        for name, text in licenses.items():
+            (out.parent / f"LICENSE-{name}.txt").write_text(text, encoding="utf-8")
 
     total = sum(len(e) for _, e in groups)
     variants = sum(len(x["variants"]) for _, e in groups for x in e)

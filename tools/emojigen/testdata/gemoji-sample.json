@@ -1,0 +1,5 @@
+[
+  {"emoji": "👍", "description": "thumbs up", "category": "People & Body", "aliases": ["+1", "thumbsup"], "tags": ["approve", "ok"]},
+  {"emoji": "😂", "description": "face with tears of joy", "category": "Smileys & Emotion", "aliases": ["joy"], "tags": ["tears"]},
+  {"emoji": "🇨🇦", "description": "flag: Canada", "category": "Flags", "aliases": ["canada"], "tags": []}
+]
