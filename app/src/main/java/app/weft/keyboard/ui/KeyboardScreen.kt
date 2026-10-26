@@ -75,11 +75,11 @@ import app.weft.keyboard.layout.KeyRow
 import app.weft.keyboard.layout.KeyboardPage
 import app.weft.keyboard.layout.Layouts
 
-private val RowHeight = 54.dp
+private val RowHeight = 58.dp
 private val KeyGap = 3.dp
 
 /** Space between the bottom row and the system navigation bar / IME switcher. */
-private val BottomClearance = 14.dp
+private val BottomClearance = 16.dp
 private const val KEY_ROWS = 4
 
 @Composable
@@ -234,7 +234,7 @@ private fun RowScope.KeySlot(key: Key, state: KeyboardState, onKey: (Key) -> Uni
                 style = KeyStyle.Letter,
                 onTap = { onKey(key) },
             ) {
-                Text(label, fontSize = 22.sp, color = it)
+                Text(label, fontSize = 23.sp, color = it)
             }
         }
         is ActionKey -> ActionKeyView(key, state, slot, onKey)

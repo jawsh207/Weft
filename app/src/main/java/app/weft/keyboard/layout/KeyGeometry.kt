@@ -5,10 +5,10 @@ package app.weft.keyboard.layout
  * draws with. Used for typo proximity now and swipe-path matching later.
  *
  * @param rowAspect row height divided by a standard key's width
- *   (54dp rows on a ~40dp-wide key ≈ 1.35).
+ *   (58dp rows on a ~40dp-wide key ≈ 1.45; keep in sync with RowHeight).
  */
 object KeyGeometry {
-    fun centers(rows: List<KeyRow>, rowAspect: Float = 1.35f): Map<Int, FloatArray> {
+    fun centers(rows: List<KeyRow>, rowAspect: Float = 1.45f): Map<Int, FloatArray> {
         val out = HashMap<Int, FloatArray>()
         rows.forEachIndexed { r, row ->
             var x = 0f
