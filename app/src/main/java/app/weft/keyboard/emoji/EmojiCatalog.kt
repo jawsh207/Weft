@@ -31,7 +31,8 @@ class EmojiCatalog(val groups: List<EmojiGroup>) {
 
     /**
      * Name search. Every word typed must start a word of the emoji's name
-     * ("thu up" finds "thumbs up"). Names that start with the query rank first.
+     * ("thu up" finds "thumbs up"). Whole-word matches rank above partial ones,
+     * and shorter names first, so the plain emoji leads ("heart" → ❤️ before 💘).
      */
     fun search(query: String, limit: Int = 60): List<Emoji> {
         val q = query.trim().lowercase()
@@ -41,21 +42,18 @@ class EmojiCatalog(val groups: List<EmojiGroup>) {
             .mapNotNull { e ->
                 val name = e.name.lowercase()
                 val words = name.split(WORD_BREAK)
-                if (tokens.all { t -> words.any { it.startsWith(t) } }) {
-                    val rank = when {
-                        name == q -> 0
-                        name.startsWith(q) -> 1
-                        words.first().startsWith(tokens.first()) -> 2
-                        else -> 3
-                    }
-                    rank to e
-                } else {
-                    null
+                if (!tokens.all { t -> words.any { it.startsWith(t) } }) return@mapNotNull null
+                val rank = when {
+                    name == q -> 0
+                    tokens.all { t -> t in words } -> 1
+                    name.startsWith(q) -> 2
+                    else -> 3
                 }
+                Triple(rank, name.length, e)
             }
-            .sortedBy { it.first } // stable: keeps Unicode order within a rank
+            .sortedWith(compareBy({ it.first }, { it.second })) // stable within ties
             .take(limit)
-            .map { it.second }
+            .map { it.third }
             .toList()
     }
 
