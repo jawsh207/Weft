@@ -125,7 +125,7 @@ fun KeyboardScreen(
                 .windowInsetsPadding(WindowInsets.navigationBars)
                 .padding(start = KeyGap, end = KeyGap, top = KeyGap, bottom = BottomClearance),
         ) {
-            TopStrip(state, onMic, onSuggestion)
+            TopStrip(state, onMic, onSuggestion, emoji)
             if (state.page == KeyboardPage.Emoji) {
                 if (state.emojiQuery != null) {
                     EmojiSearch(state, handlers, emoji)
@@ -140,12 +140,16 @@ fun KeyboardScreen(
     }
 }
 
-/** Suggestion strip plus the mic key. Voice status replaces suggestions while listening. */
+/**
+ * Suggestion strip plus the mic key. Voice status replaces suggestions while
+ * listening; on the emoji page the strip holds the emoji search box instead.
+ */
 @Composable
 private fun TopStrip(
     state: KeyboardState,
     onMic: () -> Unit,
     onSuggestion: (SuggestionChip) -> Unit,
+    emoji: EmojiActions,
 ) {
     Row(
         Modifier
@@ -174,6 +178,7 @@ private fun TopStrip(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                state.page == KeyboardPage.Emoji -> EmojiSearchPill(state.emojiQuery, emoji.onSearch)
                 state.suggestions.isNotEmpty() -> SuggestionRow(state.suggestions, onSuggestion)
             }
         }
@@ -254,7 +259,7 @@ internal fun KeyRowView(row: KeyRow, state: KeyboardState, handlers: KeyHandlers
 }
 
 @Composable
-private fun RowScope.KeySlot(key: Key, state: KeyboardState, handlers: KeyHandlers) {
+internal fun RowScope.KeySlot(key: Key, state: KeyboardState, handlers: KeyHandlers) {
     val slot = Modifier
         .weight(key.weight)
         .fillMaxHeight()

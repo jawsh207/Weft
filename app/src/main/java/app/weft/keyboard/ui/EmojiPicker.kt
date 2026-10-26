@@ -1,5 +1,8 @@
 package app.weft.keyboard.ui
 
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
+import android.graphics.RenderEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -22,6 +25,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -30,15 +34,17 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asComposeRenderEffect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -50,6 +56,8 @@ import app.weft.keyboard.R
 import app.weft.keyboard.emoji.Emoji
 import app.weft.keyboard.emoji.EmojiCatalog
 import app.weft.keyboard.ime.KeyboardState
+import app.weft.keyboard.layout.ActionKey
+import app.weft.keyboard.layout.KeyAction
 import app.weft.keyboard.layout.Layouts
 import kotlinx.coroutines.launch
 
@@ -63,8 +71,8 @@ class EmojiActions(
     val onSearch: () -> Unit,
 )
 
-private val TabsHeight = 40.dp
 private val CellSize = 46.dp
+private val TabWidth = 44.dp
 
 /** A section of the grid: recently used, or one Unicode group. */
 private class Section(val title: String, val icon: String, val items: List<Cell>)
@@ -83,6 +91,11 @@ private val GROUP_ICONS = mapOf(
     "Symbols" to "🔣",
     "Flags" to "🏁",
 )
+
+/** Draws colour emoji in grey, for calm, icon-like category tabs. */
+private val Monochrome = RenderEffect.createColorFilterEffect(
+    ColorMatrixColorFilter(ColorMatrix().apply { setSaturation(0f) }),
+).asComposeRenderEffect()
 
 private fun sectionsFor(
     catalog: EmojiCatalog,
@@ -104,7 +117,63 @@ private fun sectionsFor(
     return out
 }
 
-/** Category tabs, a scrolling grid with section headers, and the ABC/space/delete row. */
+/**
+ * The search box in the suggestion strip on the emoji page. Tapping it starts
+ * a search; while searching it shows the query with a caret.
+ */
+@Composable
+internal fun EmojiSearchPill(query: String?, onSearch: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val label = stringResource(R.string.emoji_search)
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(40.dp)
+            .padding(end = 8.dp)
+            .semantics { contentDescription = label },
+        shape = RoundedCornerShape(20.dp),
+        color = cs.surfaceContainerHighest,
+        onClick = onSearch,
+    ) {
+        Row(Modifier.padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                painterResource(R.drawable.ic_search),
+                contentDescription = null,
+                tint = cs.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(10.dp))
+            if (query.isNullOrEmpty()) {
+                Text(
+                    stringResource(R.string.emoji_search_hint),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = cs.onSurfaceVariant,
+                )
+            } else {
+                Text(
+                    query,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = cs.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+            }
+            if (query != null) {
+                // Caret, so it's clear the keys type here.
+                Box(
+                    Modifier
+                        .padding(start = 2.dp)
+                        .width(2.dp)
+                        .height(20.dp)
+                        .background(cs.primary),
+                )
+            }
+        }
+    }
+}
+
+/** The emoji grid in a rounded panel, then ABC · category tabs · delete. */
 @Composable
 internal fun EmojiPicker(state: KeyboardState, handlers: KeyHandlers, actions: EmojiActions) {
     val catalog = state.emojiCatalog
@@ -124,50 +193,65 @@ internal fun EmojiPicker(state: KeyboardState, handlers: KeyHandlers, actions: E
     }
 
     Column {
-        Box(
-            Modifier
+        Surface(
+            modifier = Modifier
                 .fillMaxWidth()
-                .height(RowHeight * 3 - TabsHeight),
-            contentAlignment = Alignment.Center,
+                .height(RowHeight * 3)
+                .padding(KeyGap),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
         ) {
-            when {
-                catalog == null -> LoadingIndicator(Modifier.size(40.dp))
-                sections.isEmpty() -> Text(
-                    stringResource(R.string.emoji_none),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                else -> LazyVerticalGrid(
-                    columns = GridCells.Adaptive(CellSize),
-                    state = grid,
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    sections.forEachIndexed { si, section ->
-                        item(key = "h$si", span = { GridItemSpan(maxLineSpan) }, contentType = "header") {
-                            Text(
-                                section.title,
-                                modifier = Modifier.padding(start = 8.dp, top = 8.dp, bottom = 4.dp),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        itemsIndexed(
-                            section.items,
-                            key = { i, cell -> "$si:$i:${cell.text}" },
-                            contentType = { _, _ -> "emoji" },
-                        ) { _, cell ->
-                            EmojiCell(cell, handlers, actions, Modifier.aspectRatio(1f))
+            Box(contentAlignment = Alignment.Center) {
+                when {
+                    catalog == null -> LoadingIndicator(Modifier.size(40.dp))
+                    sections.isEmpty() -> Text(
+                        stringResource(R.string.emoji_none),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    else -> LazyVerticalGrid(
+                        columns = GridCells.Adaptive(CellSize),
+                        state = grid,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 4.dp),
+                    ) {
+                        sections.forEachIndexed { si, section ->
+                            item(key = "h$si", span = { GridItemSpan(maxLineSpan) }, contentType = "header") {
+                                Text(
+                                    section.title,
+                                    modifier = Modifier.padding(start = 8.dp, top = 10.dp, bottom = 4.dp),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            itemsIndexed(
+                                section.items,
+                                key = { i, cell -> "$si:$i:${cell.text}" },
+                                contentType = { _, _ -> "emoji" },
+                            ) { _, cell ->
+                                EmojiCell(cell, handlers, actions, Modifier.aspectRatio(1f))
+                            }
                         }
                     }
                 }
             }
         }
-        EmojiTabs(
-            sections = sections,
-            current = current,
-            onSearch = actions.onSearch,
-            onSelect = { i -> scope.launch { grid.scrollToItem(starts[i]) } },
-        )
-        KeyRowView(Layouts.emojiBottom, state, handlers)
+        // ABC · tabs · delete, like most keyboards' emoji pages. No space bar here.
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(RowHeight),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            KeySlot(ActionKey(KeyAction.ToLetters, 1.5f), state, handlers)
+            EmojiTabs(
+                sections = sections,
+                current = current,
+                onSelect = { i -> scope.launch { grid.scrollToItem(starts[i]) } },
+                modifier = Modifier.weight(7f),
+            )
+            KeySlot(ActionKey(KeyAction.Backspace, 1.5f), state, handlers)
+        }
     }
 }
 
@@ -175,36 +259,31 @@ internal fun EmojiPicker(state: KeyboardState, handlers: KeyHandlers, actions: E
 private fun EmojiTabs(
     sections: List<Section>,
     current: Int,
-    onSearch: () -> Unit,
     onSelect: (Int) -> Unit,
+    modifier: Modifier,
 ) {
     val cs = MaterialTheme.colorScheme
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .height(TabsHeight),
+    val tabs = rememberLazyListState()
+    // Keep the highlighted tab in view as the grid scrolls.
+    LaunchedEffect(current) {
+        val visible = tabs.layoutInfo.visibleItemsInfo
+        val shown = visible.any { it.index == current && it.offset >= 0 &&
+            it.offset + it.size <= tabs.layoutInfo.viewportEndOffset }
+        if (!shown && sections.isNotEmpty()) tabs.animateScrollToItem((current - 1).coerceAtLeast(0))
+    }
+    LazyRow(
+        state = tabs,
+        modifier = modifier.fillMaxHeight(),
+        horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val searchLabel = stringResource(R.string.emoji_search)
-        Box(
-            Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .clip(CircleShape)
-                .clickable(onClick = onSearch)
-                .semantics { contentDescription = searchLabel },
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(painterResource(R.drawable.ic_search), null, tint = cs.onSurfaceVariant)
-        }
-        sections.forEachIndexed { i, section ->
+        itemsIndexed(sections, key = { i, s -> "$i:${s.title}" }) { i, section ->
             val selected = i == current
             Box(
                 Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .padding(horizontal = 1.dp, vertical = 3.dp)
-                    .clip(RoundedCornerShape(16.dp))
+                    .size(TabWidth)
+                    .padding(2.dp)
+                    .clip(CircleShape)
                     .background(if (selected) cs.secondaryContainer else Color.Transparent)
                     .clickable { onSelect(i) }
                     .semantics { contentDescription = section.title },
@@ -212,8 +291,11 @@ private fun EmojiTabs(
             ) {
                 Text(
                     section.icon,
-                    fontSize = 18.sp,
-                    modifier = Modifier.alpha(if (selected) 1f else 0.6f),
+                    fontSize = 20.sp,
+                    modifier = Modifier.graphicsLayer {
+                        renderEffect = Monochrome
+                        alpha = if (selected) 1f else 0.6f
+                    },
                 )
             }
         }
@@ -241,8 +323,9 @@ private fun EmojiCell(cell: Cell, handlers: KeyHandlers, actions: EmojiActions, 
 }
 
 /**
- * Search: a query box, a row of matches, and the letter keys, which type into
- * the query instead of the app. Enter or the emoji key returns to the grid.
+ * Search: the query shows in the suggestion strip's search box; below it a row
+ * of matches and the letter keys, which type into the query instead of the app.
+ * Enter or the emoji key returns to the grid.
  */
 @Composable
 internal fun EmojiSearch(state: KeyboardState, handlers: KeyHandlers, actions: EmojiActions) {
@@ -258,43 +341,6 @@ internal fun EmojiSearch(state: KeyboardState, handlers: KeyHandlers, actions: E
     }
 
     Column {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(44.dp)
-                .padding(horizontal = KeyGap, vertical = 2.dp),
-            shape = RoundedCornerShape(22.dp),
-            color = cs.surfaceContainerHighest,
-        ) {
-            Row(Modifier.padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(painterResource(R.drawable.ic_search), null, tint = cs.onSurfaceVariant)
-                Spacer(Modifier.width(10.dp))
-                if (query.isEmpty()) {
-                    Text(
-                        stringResource(R.string.emoji_search_hint),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = cs.onSurfaceVariant,
-                    )
-                } else {
-                    Text(
-                        query,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = cs.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                }
-                // Caret, so it's clear the keys type here.
-                Box(
-                    Modifier
-                        .padding(start = 2.dp)
-                        .width(2.dp)
-                        .height(22.dp)
-                        .background(cs.primary),
-                )
-            }
-        }
         Box(
             Modifier
                 .fillMaxWidth()

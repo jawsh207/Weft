@@ -108,13 +108,6 @@ object Layouts {
         )
     }
 
-    /** Bottom row shown under the emoji panel. */
-    val emojiBottom: KeyRow = listOf(
-        ActionKey(KeyAction.ToLetters, 1.5f),
-        ActionKey(KeyAction.Space, 7f),
-        ActionKey(KeyAction.Backspace, 1.5f),
-    )
-
     /** Bottom row while typing an emoji search. Enter or the emoji key returns to the grid. */
     val emojiSearchBottom: KeyRow = listOf(
         ActionKey(KeyAction.ToLetters, 1.5f),
