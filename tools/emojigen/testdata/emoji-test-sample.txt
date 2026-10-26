@@ -1,0 +1,59 @@
+# emoji-test.txt
+# This file provides data for testing which emoji forms should be in keyboards and which should also be displayed/processed.
+# Version: 16.0
+# Date: 2024-08-14, 23:51:54 GMT
+# © 2024 Unicode®, Inc.
+
+# group: Smileys & Emotion
+
+# subgroup: face-smiling
+1F600                                                  ; fully-qualified     # 😀 E1.0 grinning face
+1F602                                                  ; fully-qualified     # 😂 E0.6 face with tears of joy
+263A FE0F                                              ; fully-qualified     # ☺️ E0.6 smiling face
+263A                                                   ; unqualified         # ☺ E0.6 smiling face
+
+# subgroup: heart
+2764 FE0F                                              ; fully-qualified     # ❤️ E0.6 red heart
+2764                                                   ; unqualified         # ❤ E0.6 red heart
+
+# group: People & Body
+
+# subgroup: hand-fingers-open
+1F44B                                                  ; fully-qualified     # 👋 E0.6 waving hand
+1F44B 1F3FB                                            ; fully-qualified     # 👋🏻 E1.0 waving hand: light skin tone
+1F44B 1F3FC                                            ; fully-qualified     # 👋🏼 E1.0 waving hand: medium-light skin tone
+1F44B 1F3FD                                            ; fully-qualified     # 👋🏽 E1.0 waving hand: medium skin tone
+1F44B 1F3FE                                            ; fully-qualified     # 👋🏾 E1.0 waving hand: medium-dark skin tone
+1F44B 1F3FF                                            ; fully-qualified     # 👋🏿 E1.0 waving hand: dark skin tone
+
+# subgroup: hand-single-finger
+261D FE0F                                              ; fully-qualified     # ☝️ E0.6 index pointing up
+261D                                                   ; unqualified         # ☝ E0.6 index pointing up
+261D 1F3FB                                             ; fully-qualified     # ☝🏻 E1.0 index pointing up: light skin tone
+261D 1F3FF                                             ; fully-qualified     # ☝🏿 E1.0 index pointing up: dark skin tone
+
+# subgroup: hand-fingers-closed
+1F44D                                                  ; fully-qualified     # 👍 E0.6 thumbs up
+1F44D 1F3FD                                            ; fully-qualified     # 👍🏽 E1.0 thumbs up: medium skin tone
+
+# subgroup: family
+1F9D1 200D 1F91D 200D 1F9D1                            ; fully-qualified     # 🧑‍🤝‍🧑 E12.0 people holding hands
+1F9D1 1F3FB 200D 1F91D 200D 1F9D1 1F3FB                ; fully-qualified     # 🧑🏻‍🤝‍🧑🏻 E12.0 people holding hands: light skin tone
+1F9D1 1F3FB 200D 1F91D 200D 1F9D1 1F3FF                ; fully-qualified     # 🧑🏻‍🤝‍🧑🏿 E12.1 people holding hands: light skin tone, dark skin tone
+
+# group: Component
+
+# subgroup: skin-tone
+1F3FB                                                  ; component           # 🏻 E1.0 light skin tone
+
+# group: Food & Drink
+
+# subgroup: food-prepared
+1F355                                                  ; fully-qualified     # 🍕 E0.6 pizza
+
+# group: Flags
+
+# subgroup: country-flag
+1F1E8 1F1E6                                            ; fully-qualified     # 🇨🇦 E2.0 flag: Canada
+
+#EOF

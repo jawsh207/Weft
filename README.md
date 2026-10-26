@@ -24,7 +24,9 @@ This is the starter scaffold. Working now:
 - Expressive press motion: keys squish and round out on a spring
 - System haptics on every key press
 - Voice input through the system speech engine, with live partial results
-- Starter emoji panel using system glyphs, filtered by `Paint.hasGlyph()`
+- **Emoji picker** with every Unicode emoji, drawn in the phone's own emoji font:
+  category tabs, recently used, skin tones on long-press (remembered per
+  emoji), and search by name. Emoji the font can't draw are hidden
 - Setup screen: enable keyboard, switch to it, grant the mic, test field
 - **Suggestions:** typo correction that knows which keys are next to each other,
   word completions, and next-word predictions, in a three-slot strip
@@ -67,7 +69,7 @@ app/src/main/java/app/weft/keyboard/
 ├── ui/         Compose keyboard, key button with Expressive motion
 ├── theme/      SystemTheme: dynamic color + MaterialExpressiveTheme
 ├── voice/      SystemVoiceInput: wraps android.speech.SpeechRecognizer
-├── emoji/      SystemEmoji: system-font emoji, unsupported ones filtered out
+├── emoji/      Emoji list parser, search, recents and skin tones
 └── settings/   SettingsActivity: onboarding and test field
 ```
 
@@ -75,8 +77,8 @@ app/src/main/java/app/weft/keyboard/
 
 1. ~~Prediction~~ — done. Next: long-press a suggestion to forget a learned word,
    learn word pairs from the user's own typing.
-2. **Full emoji picker** — generated from Unicode `emoji-test.txt`: categories,
-   search by name, skin tones, recents.
+2. ~~Full emoji picker~~ — done. Next: search by keyword as well as name
+   (Unicode CLDR annotations, so "lol" finds 😂).
 3. **Long-press alternates** — accented letters and key popups.
 4. **Settings** — haptics, key height, on-device voice preference, number row.
 5. **Large screens** — floating, one-handed and split layouts for tablets and foldables.
@@ -88,6 +90,8 @@ app/src/main/java/app/weft/keyboard/
 - Only OSI-licensed dependencies. AndroidX and Kotlin (Apache 2.0) are fine.
 - No Google Play Services, Firebase, analytics or proprietary libraries.
 - No bundled closed speech or gesture engines.
+- Emoji are never bundled: they're drawn with the phone's font. The list comes
+  from Unicode's emoji data via [tools/emojigen](tools/emojigen/build_emoji.py).
 - Dictionary data must come from openly licensed sources (see
   [tools/dictgen/README.md](tools/dictgen/README.md)), and every source is
   credited in the app.

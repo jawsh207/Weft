@@ -65,7 +65,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.weft.keyboard.R
-import app.weft.keyboard.emoji.SystemEmoji
 import app.weft.keyboard.ime.ChipStyle
 import app.weft.keyboard.ime.KeyboardState
 import app.weft.keyboard.ime.ShiftState
@@ -81,8 +80,8 @@ import app.weft.keyboard.layout.Layouts
 import kotlin.math.abs
 import kotlin.math.sign
 
-private val RowHeight = 58.dp
-private val KeyGap = 3.dp
+internal val RowHeight = 58.dp
+internal val KeyGap = 3.dp
 
 /** Space between the bottom row and the system navigation bar / IME switcher. */
 private val BottomClearance = 18.dp
@@ -92,7 +91,7 @@ private const val KEY_ROWS = 4
 private val CursorStep = 12.dp
 
 /** What keys can do besides being tapped. */
-private class KeyHandlers(
+internal class KeyHandlers(
     val onKey: (Key) -> Unit,
     val onCursor: (Int) -> Unit,
     val popup: AlternatesPopup,
@@ -102,7 +101,7 @@ private class KeyHandlers(
 fun KeyboardScreen(
     state: KeyboardState,
     onKey: (Key) -> Unit,
-    onEmoji: (String) -> Unit,
+    emoji: EmojiActions,
     onMic: () -> Unit,
     onSuggestion: (SuggestionChip) -> Unit,
     onAlternate: (String) -> Unit,
@@ -128,7 +127,11 @@ fun KeyboardScreen(
         ) {
             TopStrip(state, onMic, onSuggestion)
             if (state.page == KeyboardPage.Emoji) {
-                EmojiPanel(state, handlers, onEmoji)
+                if (state.emojiQuery != null) {
+                    EmojiSearch(state, handlers, emoji)
+                } else {
+                    EmojiPicker(state, handlers, emoji)
+                }
             } else {
                 Layouts.rowsFor(state.page).forEach { row -> KeyRowView(row, state, handlers) }
             }
@@ -240,7 +243,7 @@ private fun SuggestionSlot(chip: SuggestionChip, onSuggestion: (SuggestionChip) 
 }
 
 @Composable
-private fun KeyRowView(row: KeyRow, state: KeyboardState, handlers: KeyHandlers) {
+internal fun KeyRowView(row: KeyRow, state: KeyboardState, handlers: KeyHandlers) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -323,7 +326,10 @@ private fun ActionKeyView(
                 tint,
             )
             KeyAction.Backspace -> KeyIcon(R.drawable.ic_backspace, tint)
-            KeyAction.Enter -> KeyIcon(enterIcon(state.enterAction), tint)
+            KeyAction.Enter -> KeyIcon(
+                if (state.emojiQuery != null) R.drawable.ic_check else enterIcon(state.enterAction),
+                tint,
+            )
             KeyAction.Emoji -> KeyIcon(R.drawable.ic_emoji, tint)
             KeyAction.Space -> if (state.page == KeyboardPage.Numpad) {
                 Text("\u2423", fontSize = 23.sp, color = tint)
@@ -363,48 +369,9 @@ private fun KeyText(text: String, tint: Color) {
     Text(text, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = tint)
 }
 
-// --- Emoji -------------------------------------------------------------------------------
-
-@Composable
-private fun EmojiPanel(state: KeyboardState, handlers: KeyHandlers, onEmoji: (String) -> Unit) {
-    val emoji = remember { SystemEmoji.starter }
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(RowHeight * (KEY_ROWS - 1)),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (emoji.isEmpty()) {
-            Text(
-                stringResource(R.string.emoji_none),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(46.dp),
-                modifier = Modifier.fillMaxSize(),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                items(emoji) { e ->
-                    KeyButton(
-                        modifier = Modifier.aspectRatio(1f),
-                        style = KeyStyle.Ghost,
-                        handlers = handlers,
-                        onTap = { onEmoji(e) },
-                    ) {
-                        Text(e, fontSize = 26.sp) // system emoji font
-                    }
-                }
-            }
-        }
-    }
-    KeyRowView(Layouts.emojiBottom, state, handlers)
-}
-
 // --- Key button with Expressive press motion --------------------------------------
 
-private enum class KeyStyle { Letter, Function, Active, Primary, Ghost }
+internal enum class KeyStyle { Letter, Function, Active, Primary, Ghost }
 
 private data class KeyColors(val container: Color, val content: Color, val pressed: Color)
 
@@ -421,7 +388,7 @@ private fun keyColors(style: KeyStyle): KeyColors {
 }
 
 /** How a key responds to touch beyond a simple tap. */
-private sealed interface KeyGesture {
+internal sealed interface KeyGesture {
     /** Commit on release. */
     data object Tap : KeyGesture
 
@@ -432,7 +399,11 @@ private sealed interface KeyGesture {
     data object Cursor : KeyGesture
 
     /** Hold to open a popup of alternates, slide to choose, release to commit. */
-    data class Alternates(val options: List<String>) : KeyGesture
+    data class Alternates(
+        val options: List<String>,
+        /** Overrides what picking does (emoji remember their skin tone). */
+        val onPick: ((String) -> Unit)? = null,
+    ) : KeyGesture
 }
 
 /**
@@ -441,7 +412,7 @@ private sealed interface KeyGesture {
  * motion scheme's spatial spring.
  */
 @Composable
-private fun KeyButton(
+internal fun KeyButton(
     modifier: Modifier,
     style: KeyStyle,
     handlers: KeyHandlers,
@@ -548,7 +519,7 @@ private fun KeyButton(
                                 if (released != null) {
                                     if (released.normally) currentOnTap()
                                 } else {
-                                    handlers.popup.open(g.options, bounds)
+                                    handlers.popup.open(g.options, bounds, g.onPick)
                                     view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                                     while (true) {
                                         val change = awaitPointerEvent().changes

@@ -14,6 +14,10 @@
     <string name="voice_no_match">Didn\'t catch that</string>
     <string name="voice_error">Voice input error (%1$d)</string>
     <string name="emoji_none">No emoji available on this device</string>
+    <string name="emoji_recent">Recently used</string>
+    <string name="emoji_search">Search emoji</string>
+    <string name="emoji_search_hint">Search emoji</string>
+    <string name="emoji_no_results">No emoji found</string>
 
     <string name="setup_title">Set up keyboard</string>
     <string name="setup_enable_title">Enable the keyboard</string>
@@ -43,4 +47,6 @@
     <string name="settings_dictionary_missing">No dictionary is bundled in this build, so suggestions use learned words only. Build one with tools/dictgen/make_dict.py.</string>
     <string name="settings_dictionary_words">%1$s · %2$,d words</string>
     <string name="settings_dictionary_sources">Built from these open sources:</string>
+    <string name="settings_emoji_title">Emoji</string>
+    <string name="settings_emoji_body">Emoji are drawn with your phone\'s own emoji font. The list, names and skin tones come from Unicode\'s emoji data (Unicode License v3).</string>
 </resources>

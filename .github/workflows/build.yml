@@ -8,7 +8,7 @@ on:
   # Rebuild after the Dictionary workflow commits a new dictionary
   # (pushes made with GITHUB_TOKEN don't trigger workflows on their own).
   workflow_run:
-    workflows: [Dictionary]
+    workflows: [Dictionary, Emoji data]
     types: [completed]
 
 permissions:

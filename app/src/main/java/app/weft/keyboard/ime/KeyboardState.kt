@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.weft.keyboard.emoji.EmojiCatalog
 import app.weft.keyboard.layout.KeyboardPage
 
 enum class ShiftState { Off, Once, Locked }
@@ -21,6 +22,16 @@ class KeyboardState {
 
     /** Three slots (left, center, right); null slots are empty. Empty list = no strip. */
     var suggestions by mutableStateOf<List<SuggestionChip?>>(emptyList())
+
+    // --- Emoji picker ---
+    var emojiCatalog by mutableStateOf<EmojiCatalog?>(null)
+    var emojiRecents by mutableStateOf<List<String>>(emptyList())
+
+    /** Chosen skin tone per base emoji. */
+    var emojiTones by mutableStateOf<Map<String, String>>(emptyMap())
+
+    /** Text typed into emoji search; null when not searching. */
+    var emojiQuery by mutableStateOf<String?>(null)
 
     var voiceAvailable by mutableStateOf(false)
     var listening by mutableStateOf(false)

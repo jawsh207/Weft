@@ -176,6 +176,14 @@ private fun SetupScreen(requestMicOnLaunch: Boolean) {
 
             TypingSettings()
             DictionaryInfo()
+            SectionCard(stringResource(R.string.settings_emoji_title)) {
+                Text(
+                    stringResource(R.string.settings_emoji_body),
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
 
             Spacer(Modifier.height(8.dp))
             Text(

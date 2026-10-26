@@ -2,6 +2,7 @@ package app.weft.keyboard.ime
 
 import android.content.Intent
 import android.content.res.Configuration
+import android.graphics.Paint
 import android.icu.text.BreakIterator
 import android.inputmethodservice.InputMethodService
 import android.os.SystemClock
@@ -26,6 +27,9 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import app.weft.keyboard.R
+import app.weft.keyboard.emoji.EmojiCatalog
+import app.weft.keyboard.emoji.EmojiHistory
+import app.weft.keyboard.emoji.SystemEmoji
 import app.weft.keyboard.layout.ActionKey
 import app.weft.keyboard.layout.CharKey
 import app.weft.keyboard.layout.Gap
@@ -45,6 +49,7 @@ import app.weft.keyboard.settings.learnedReset
 import app.weft.keyboard.settings.showSuggestions
 import app.weft.keyboard.settings.SettingsActivity
 import app.weft.keyboard.theme.SystemTheme
+import app.weft.keyboard.ui.EmojiActions
 import app.weft.keyboard.ui.KeyboardScreen
 import app.weft.keyboard.voice.SystemVoiceInput
 import kotlinx.coroutines.Dispatchers
@@ -78,6 +83,7 @@ class WeftKeyboardService :
     // --- Keyboard state ------------------------------------------------------------
 
     private val state = KeyboardState()
+    private val emojiHistory = EmojiHistory()
     private lateinit var voice: SystemVoiceInput
     private lateinit var learned: LearnedWords
     private lateinit var typing: TypingController
@@ -118,6 +124,66 @@ class WeftKeyboardService :
         learned = LearnedWords(File(filesDir, LEARNED_FILE))
         typing = TypingController(learned)
         loadPrediction()
+        loadEmoji()
+    }
+
+    /** Emoji list from assets, filtered to what the phone's emoji font can draw. */
+    private fun loadEmoji() {
+        val prefs = Prefs.of(this)
+        emojiHistory.decode(prefs.getString(EMOJI_RECENTS, null), prefs.getString(EMOJI_TONES, null))
+        state.emojiRecents = emojiHistory.recents
+        state.emojiTones = emojiHistory.preferredTones
+        lifecycleScope.launch {
+            state.emojiCatalog = withContext(Dispatchers.Default) {
+                val paint = Paint()
+                runCatching {
+                    val text = assets.open(EMOJI_ASSET).bufferedReader().use { it.readText() }
+                    EmojiCatalog.parse(text) { paint.hasGlyph(it) }
+                }.getOrNull()?.takeIf { it.size > 0 }
+                    ?: EmojiCatalog.fromList("Smileys & Emotion", SystemEmoji.starter)
+            }
+        }
+    }
+
+    private fun onEmoji(text: String) {
+        state.message = null
+        commitKeyText(text)
+        rememberEmoji(text)
+    }
+
+    private fun onEmojiVariant(base: String, chosen: String) {
+        emojiHistory.setPreferred(base, chosen)
+        state.emojiTones = emojiHistory.preferredTones
+        onEmoji(chosen)
+    }
+
+    private fun rememberEmoji(text: String) {
+        emojiHistory.use(text)
+        state.emojiRecents = emojiHistory.recents
+        Prefs.of(this).edit()
+            .putString(EMOJI_RECENTS, emojiHistory.encodeRecents())
+            .putString(EMOJI_TONES, emojiHistory.encodeTones())
+            .apply()
+    }
+
+    /** While searching emoji, keys edit the search box instead of the app's text. */
+    private fun onEmojiSearchKey(key: Key) {
+        val query = state.emojiQuery ?: return
+        when (key) {
+            is CharKey -> state.emojiQuery = query + key.output.lowercase()
+            is ActionKey -> when (key.action) {
+                KeyAction.Backspace -> state.emojiQuery = query.dropLast(1)
+                KeyAction.Space -> if (query.isNotEmpty() && !query.endsWith(" ")) state.emojiQuery = "$query "
+                KeyAction.Enter, KeyAction.Emoji -> state.emojiQuery = null
+                KeyAction.ToLetters -> {
+                    state.emojiQuery = null
+                    state.page = KeyboardPage.Letters
+                }
+                KeyAction.Shift -> toggleShift()
+                else -> Unit
+            }
+            is Gap -> Unit
+        }
     }
 
     private fun loadPrediction() {
@@ -154,7 +220,11 @@ class WeftKeyboardService :
                     KeyboardScreen(
                         state = state,
                         onKey = ::onKey,
-                        onEmoji = ::commitKeyText,
+                        emoji = EmojiActions(
+                            onEmoji = ::onEmoji,
+                            onVariant = ::onEmojiVariant,
+                            onSearch = { state.emojiQuery = "" },
+                        ),
                         onMic = ::onMic,
                         onSuggestion = ::onSuggestion,
                         onAlternate = ::onAlternate,
@@ -171,6 +241,7 @@ class WeftKeyboardService :
 
         state.themeEpoch++ // re-read the palette each time the keyboard shows
         state.message = null
+        state.emojiQuery = null
         state.voiceAvailable = voice.isAvailable
         state.enterAction = resolveEnterAction(info)
         state.page = when (info.inputType and InputType.TYPE_MASK_CLASS) {
@@ -287,6 +358,10 @@ class WeftKeyboardService :
 
     private fun onKey(key: Key) {
         state.message = null
+        if (state.emojiQuery != null && state.page == KeyboardPage.Emoji) {
+            onEmojiSearchKey(key)
+            return
+        }
         when (key) {
             is CharKey -> {
                 val text = if (state.shift != ShiftState.Off) key.output.uppercase() else key.output
@@ -304,7 +379,10 @@ class WeftKeyboardService :
             KeyAction.Backspace -> if (!typing.onBackspace(editor)) deleteBackward()
             KeyAction.Enter -> onEnter()
             KeyAction.Space -> typing.onSeparator(editor, " ")
-            KeyAction.ToLetters -> state.page = KeyboardPage.Letters
+            KeyAction.ToLetters -> {
+                state.emojiQuery = null
+                state.page = KeyboardPage.Letters
+            }
             KeyAction.ToSymbols -> state.page = KeyboardPage.Symbols
             KeyAction.ToMoreSymbols -> state.page = KeyboardPage.MoreSymbols
             KeyAction.ToNumpad -> state.page = KeyboardPage.Numpad
@@ -315,6 +393,10 @@ class WeftKeyboardService :
     /** A long-press alternate ("é", "…") is typed like the key it came from. */
     private fun onAlternate(text: String) {
         state.message = null
+        if (state.emojiQuery != null && state.page == KeyboardPage.Emoji) {
+            state.emojiQuery = state.emojiQuery + text.lowercase()
+            return
+        }
         commitKeyText(text)
         if (state.shift == ShiftState.Once) state.shift = ShiftState.Off
     }
@@ -447,5 +529,8 @@ class WeftKeyboardService :
         const val DOUBLE_TAP_MS = 300L
         const val GRAPHEME_LOOKBACK = 64
         const val LEARNED_FILE = "learned_words.tsv"
+        const val EMOJI_ASSET = "emoji/emoji.txt"
+        const val EMOJI_RECENTS = "emoji_recents"
+        const val EMOJI_TONES = "emoji_tones"
     }
 }

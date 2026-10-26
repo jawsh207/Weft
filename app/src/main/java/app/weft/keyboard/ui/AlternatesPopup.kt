@@ -68,8 +68,11 @@ class AlternatesPopup {
     val isOpen: Boolean get() = options.isNotEmpty()
     val rows: Int get() = (options.size + columns - 1) / columns
 
-    fun open(choices: List<String>, key: Rect) {
+    private var pickOverride: ((String) -> Unit)? = null
+
+    fun open(choices: List<String>, key: Rect, onPickThis: ((String) -> Unit)? = null) {
         if (choices.isEmpty()) return
+        pickOverride = onPickThis
         val screen = if (rootWidth > 0f) rootWidth else key.width * choices.size
         // Cells match the key, but very wide keys (number pad) get normal-sized cells.
         cellWidth = minOf(key.width, screen / STANDARD_KEYS_PER_ROW * MAX_CELL_SCALE)
@@ -98,8 +101,9 @@ class AlternatesPopup {
 
     fun commit() {
         val choice = options.getOrNull(selected)
+        val pick = pickOverride ?: onPick
         dismiss()
-        if (choice != null) onPick(choice)
+        if (choice != null) pick(choice)
     }
 
     fun dismiss() {

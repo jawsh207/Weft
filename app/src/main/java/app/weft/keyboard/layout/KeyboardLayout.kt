@@ -115,6 +115,14 @@ object Layouts {
         ActionKey(KeyAction.Backspace, 1.5f),
     )
 
+    /** Bottom row while typing an emoji search. Enter or the emoji key returns to the grid. */
+    val emojiSearchBottom: KeyRow = listOf(
+        ActionKey(KeyAction.ToLetters, 1.5f),
+        ActionKey(KeyAction.Emoji),
+        ActionKey(KeyAction.Space, 6f),
+        ActionKey(KeyAction.Enter, 1.5f),
+    )
+
     fun rowsFor(page: KeyboardPage): List<KeyRow> = when (page) {
         KeyboardPage.Letters -> qwerty
         KeyboardPage.Symbols -> symbols
