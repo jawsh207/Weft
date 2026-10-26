@@ -53,7 +53,7 @@ jobs:
         run: |
           for f in gradle-test.log gradle-assemble.log; do
             [ -f "$f" ] || continue
-            grep -E "^e: |error:|What went wrong|Could not |Unresolved|expected:|FAILED|Exception|^> " "$f" \
+            grep -E "^e: |error:|What went wrong|Could not |Unresolved|expected:|FAILED|Exception|^> |Dependency |requires|compileSdk|Android Gradle plugin|issues? (was|were) found" "$f" \
               | grep -vE "^> Task [^ ]+( (UP-TO-DATE|NO-SOURCE|FROM-CACHE|SKIPPED))?$" | head -48 > "$f.errors" || true
             python3 - "$f" <<'PY'
           import sys
