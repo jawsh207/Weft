@@ -20,7 +20,10 @@ Output format (UTF-8, tab separated):
 
     # comment lines
     @Group name
-    <emoji>\t<name>\t<skin variants, space separated>\t<keywords, " | " separated>
+    <emoji>\t<name>\t<skin variants, space separated>\t<keywords, " | " separated>\t<picks>
+
+<picks> are Weft's hand-picked keywords as "keyword#rank" (" | " separated):
+the emoji is that keyword's rank-th best match, and ranks above CLDR matches.
 
 Rules:
 - Only fully-qualified emoji are kept (the forms keyboards should insert).
@@ -98,7 +101,7 @@ def parse_emoji_test(text: str):
             if base is not None and len(tones) == 1:
                 base["variants"].append(emoji)
             continue
-        entry = {"emoji": emoji, "name": m.group(4).strip(), "variants": [], "keywords": []}
+        entry = {"emoji": emoji, "name": m.group(4).strip(), "variants": [], "keywords": [], "picks": []}
         by_key.setdefault(key_of(cps), entry)
         group[1].append(entry)
     return version, groups, by_key
@@ -117,6 +120,7 @@ def parse_annotations(xml_text: str) -> dict[tuple[int, ...], list[str]]:
 
 
 def read_extra_keywords(path: Path) -> dict[tuple[int, ...], list[str]]:
+    """Weft's hand-picked keywords, as "keyword#rank" (rank = position in the line)."""
     out: dict[tuple[int, ...], list[str]] = {}
     if not path.exists():
         return out
@@ -124,8 +128,8 @@ def read_extra_keywords(path: Path) -> dict[tuple[int, ...], list[str]]:
         if not line.strip() or line.startswith("#"):
             continue
         keyword, _, emoji = line.partition("\t")
-        for e in emoji.split():
-            out.setdefault(key_of(e), []).append(keyword.strip())
+        for rank, e in enumerate(emoji.split()):
+            out.setdefault(key_of(e), []).append(f"{keyword.strip().lower()}#{rank}")
     return out
 
 
@@ -134,6 +138,16 @@ def region_code(emoji: str) -> str | None:
     if len(cps) == 2 and all(REGIONAL_A <= c <= REGIONAL_A + 25 for c in cps):
         return "".join(chr(ord("a") + c - REGIONAL_A) for c in cps)
     return None
+
+
+def add_picks(by_key, picks) -> int:
+    added = 0
+    for key, words in picks.items():
+        entry = by_key.get(key)
+        if entry is not None:
+            entry["picks"].extend(w for w in words if w not in entry["picks"])
+            added += len(words)
+    return added
 
 
 def add_keywords(by_key, keyword_maps) -> int:
@@ -166,7 +180,10 @@ def render(version: str, groups, sources: list[str]) -> str:
     for name, entries in groups:
         out.append(f"@{name}")
         for e in entries:
-            out.append("\t".join([e["emoji"], e["name"], " ".join(e["variants"]), " | ".join(e["keywords"])]))
+            out.append("\t".join([
+                e["emoji"], e["name"], " ".join(e["variants"]),
+                " | ".join(e["keywords"]), " | ".join(e["picks"]),
+            ]))
     return "\n".join(out) + "\n"
 
 
@@ -193,9 +210,9 @@ def main() -> None:
             else [fetch(u) for u in ANNOTATION_URLS]
         keyword_maps += [parse_annotations(x) for x in xmls]
         sources.append("Unicode CLDR annotations (en)")
-    keyword_maps.append(read_extra_keywords(Path(args.extra_keywords)))
-    sources.append("Weft extra_keywords.tsv")
     keywords = add_keywords(by_key, keyword_maps)
+    keywords += add_picks(by_key, read_extra_keywords(Path(args.extra_keywords)))
+    sources.append("Weft extra_keywords.tsv")
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)

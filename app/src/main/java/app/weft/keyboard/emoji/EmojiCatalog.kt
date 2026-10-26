@@ -6,6 +6,8 @@ data class Emoji(
     val name: String,
     val variants: List<String> = emptyList(),
     val keywords: List<String> = emptyList(),
+    /** Weft's hand-picked keywords → rank (0 = best match for that keyword). */
+    val picks: Map<String, Int> = emptyMap(),
 )
 
 data class EmojiGroup(val name: String, val emoji: List<Emoji>)
@@ -33,7 +35,8 @@ class EmojiCatalog(val groups: List<EmojiGroup>) {
     /**
      * Search by name and keyword. Every word typed must start a word of the
      * emoji's name or keywords ("thu up" finds "thumbs up", "lol" finds 😂).
-     * Ranking: exact name, whole words in the name, an exact keyword, name
+     * Ranking: exact name, Weft's hand-picked keywords (in their listed order,
+     * so "lol" → 😂 🤣), whole words in the name, an exact CLDR keyword, name
      * prefix, then anything else; shorter names first within each, so the plain
      * emoji leads ("heart" → ❤️ before 💘).
      */
@@ -46,16 +49,18 @@ class EmojiCatalog(val groups: List<EmojiGroup>) {
                 val name = e.name.lowercase()
                 val nameWords = name.split(WORD_BREAK)
                 val keywords = e.keywords.map { it.lowercase() }
-                val words = nameWords + keywords.flatMap { it.split(WORD_BREAK) }
+                val words = nameWords + keywords.flatMap { it.split(WORD_BREAK) } + e.picks.keys
                 if (!tokens.all { t -> words.any { it.startsWith(t) } }) return@mapNotNull null
+                val pick = e.picks[q]
                 val rank = when {
                     name == q -> 0
-                    tokens.all { t -> t in nameWords } -> 1
-                    q in keywords -> 2
-                    name.startsWith(q) -> 3
-                    else -> 4
+                    pick != null -> 1
+                    tokens.all { t -> t in nameWords } -> 2
+                    q in keywords -> 3
+                    name.startsWith(q) -> 4
+                    else -> 5
                 }
-                Triple(rank, name.length, e)
+                Triple(rank, pick ?: name.length, e)
             }
             .sortedWith(compareBy({ it.first }, { it.second })) // stable within ties
             .take(limit)
@@ -98,7 +103,14 @@ class EmojiCatalog(val groups: List<EmojiGroup>) {
                             .split('|')
                             .map { it.trim() }
                             .filter { it.isNotEmpty() }
-                        current += Emoji(base, parts[1], variants, keywords)
+                        val picks = parts.getOrNull(4).orEmpty()
+                            .split('|')
+                            .mapNotNull { p ->
+                                val i = p.lastIndexOf('#')
+                                if (i <= 0) null else p.substring(0, i).trim() to (p.substring(i + 1).trim().toIntOrNull() ?: 0)
+                            }
+                            .toMap()
+                        current += Emoji(base, parts[1], variants, keywords, picks)
                     }
                 }
             }

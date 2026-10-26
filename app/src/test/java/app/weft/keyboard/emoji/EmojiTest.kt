@@ -70,7 +70,9 @@ class EmojiTest {
         assertEquals("👍", catalog.search("+1").first().base)
         assertEquals("🇨🇦", catalog.search("ca").first().base) // flag region code
         assertEquals("🍕", catalog.search("cheese").first().base)
-        // A name match still outranks a keyword-only match.
+        // Hand-picked keywords keep their listed order.
+        assertEquals(listOf("🍕", "❤️"), catalog.search("food").map { it.base })
+        // A name match still outranks a CLDR-keyword-only match.
         assertEquals("👍", catalog.search("thumbs").first().base)
     }
 
