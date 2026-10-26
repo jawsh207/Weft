@@ -159,18 +159,17 @@ object Layouts {
         "&" to listOf("§"),
         "+" to listOf("±"),
         "=" to listOf("≠", "≈", "∞"),
-        // Digits: superscript, then every fraction using the digit as numerator,
-        // then as denominator.
-        "1" to listOf("¹", "½", "⅓", "¼", "⅕", "⅙", "⅐", "⅛", "⅑", "⅒"),
-        "2" to listOf("²", "⅔", "⅖", "½"),
-        "3" to listOf("³", "¾", "⅗", "⅜", "⅓", "⅔", "↉"),
-        "4" to listOf("⁴", "⅘", "¼", "¾"),
-        "5" to listOf("⁵", "⅚", "⅝", "⅕", "⅖", "⅗", "⅘"),
-        "6" to listOf("⁶", "⅙", "⅚"),
-        "7" to listOf("⁷", "⅞", "⅐"),
-        "8" to listOf("⁸", "⅛", "⅜", "⅝", "⅞"),
-        "9" to listOf("⁹", "⅑"),
-        "0" to listOf("⁰", "↉", "⅒", "°", "∅"),
+        // Digits: superscript, subscript, then the fractions with that digit on top.
+        "1" to listOf("¹", "₁", "½", "⅓", "¼", "⅕", "⅙", "⅐", "⅛", "⅑", "⅒"),
+        "2" to listOf("²", "₂", "⅔", "⅖"),
+        "3" to listOf("³", "₃", "¾", "⅗", "⅜"),
+        "4" to listOf("⁴", "₄", "⅘"),
+        "5" to listOf("⁵", "₅", "⅚", "⅝"),
+        "6" to listOf("⁶", "₆"),
+        "7" to listOf("⁷", "₇", "⅞"),
+        "8" to listOf("⁸", "₈"),
+        "9" to listOf("⁹", "₉"),
+        "0" to listOf("⁰", "₀", "↉", "°", "∅"),
     )
 
     fun alternatesFor(output: String): List<String> = alternates[output.lowercase()].orEmpty()

@@ -41,7 +41,7 @@ class LayoutsTest {
     }
 
     @Test
-    fun digitsOfferEveryFractionUsingThem() {
+    fun digitsOfferFractionsWithThemOnTop() {
         // All Unicode vulgar fractions, as numerator/denominator.
         val fractions = mapOf(
             "½" to "1/2", "⅓" to "1/3", "⅔" to "2/3", "¼" to "1/4", "¾" to "3/4",
@@ -49,10 +49,14 @@ class LayoutsTest {
             "⅚" to "5/6", "⅐" to "1/7", "⅛" to "1/8", "⅜" to "3/8", "⅝" to "5/8",
             "⅞" to "7/8", "⅑" to "1/9", "⅒" to "1/10", "↉" to "0/3",
         )
+        val superscripts = "⁰¹²³⁴⁵⁶⁷⁸⁹"
+        val subscripts = "₀₁₂₃₄₅₆₇₈₉"
         for (digit in '0'..'9') {
-            val expected = fractions.filterValues { digit in it }.keys
-            val actual = Layouts.alternatesFor(digit.toString()).filter { it in fractions }.toSet()
-            assertEquals("fractions for $digit", expected, actual)
+            val alts = Layouts.alternatesFor(digit.toString())
+            val expected = fractions.filterValues { it.substringBefore('/') == digit.toString() }.keys
+            assertEquals("fractions for $digit", expected, alts.filter { it in fractions }.toSet())
+            assertEquals(superscripts[digit - '0'].toString(), alts[0])
+            assertEquals(subscripts[digit - '0'].toString(), alts[1])
         }
     }
 
