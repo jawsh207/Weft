@@ -283,11 +283,14 @@ class WeftKeyboardService :
             variation == InputType.TYPE_TEXT_VARIATION_FILTER
         val noLearning = (info.imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) != 0
 
-        typing.suggestionsEnabled = prefs.showSuggestions() && isText && !isPassword && !noSuggestions
-        typing.autocorrectEnabled = prefs.autocorrect() && !technical
-        typing.learningEnabled = prefs.learnWords() && !isPassword && !noLearning
-        // Swipe needs a text field it may predict in (never passwords or URLs).
-        swipeAllowed = prefs.swipeTyping() && isText && !isPassword && !technical
+        val policy = FieldPolicy.of(
+            FieldTraits(isText, isPassword, noSuggestions, technical, noLearning),
+            TypingPrefs(prefs.showSuggestions(), prefs.autocorrect(), prefs.learnWords(), prefs.swipeTyping()),
+        )
+        typing.suggestionsEnabled = policy.suggestions
+        typing.autocorrectEnabled = policy.autocorrect
+        typing.learningEnabled = policy.learning
+        swipeAllowed = policy.swipe
         state.swipeEnabled = swipeAllowed && swipeDecoder != null
 
         val reset = prefs.learnedReset()
