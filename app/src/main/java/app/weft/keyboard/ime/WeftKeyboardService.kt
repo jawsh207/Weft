@@ -1,5 +1,6 @@
 package app.weft.keyboard.ime
 
+import android.content.ClipboardManager
 import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Paint
@@ -53,6 +54,7 @@ import app.weft.keyboard.settings.SettingsActivity
 import app.weft.keyboard.theme.SystemTheme
 import app.weft.keyboard.ui.EmojiActions
 import app.weft.keyboard.ui.KeyboardScreen
+import app.weft.keyboard.ui.ToolActions
 import app.weft.keyboard.voice.SystemVoiceInput
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -98,6 +100,8 @@ class WeftKeyboardService :
     private var swipeDecoder: SwipeDecoder? = null
     private var swipeAllowed = false
     private var learnedResetSeen = 0
+    private lateinit var clipboard: ClipboardManager
+    private val clipListener = ClipboardManager.OnPrimaryClipChangedListener { updateClipboardState() }
 
     /** The current text field, for [TypingController]. */
     private val editor = object : TextEditor {
@@ -130,6 +134,8 @@ class WeftKeyboardService :
         voice = SystemVoiceInput(this, voiceListener)
         learned = LearnedWords(File(filesDir, LEARNED_FILE))
         typing = TypingController(learned)
+        clipboard = getSystemService(ClipboardManager::class.java)
+        clipboard.addPrimaryClipChangedListener(clipListener)
         loadPrediction()
         loadEmoji()
     }
@@ -235,6 +241,12 @@ class WeftKeyboardService :
                             onVariant = ::onEmojiVariant,
                             onSearch = { state.emojiQuery = "" },
                         ),
+                        tools = ToolActions(
+                            onToggle = { state.toolsOpen = !state.toolsOpen },
+                            onPaste = ::paste,
+                            onClearClipboard = ::clearClipboard,
+                            onSettings = ::openSettings,
+                        ),
                         onMic = ::onMic,
                         onSuggestion = ::onSuggestion,
                         onAlternate = ::onAlternate,
@@ -253,6 +265,8 @@ class WeftKeyboardService :
         state.themeEpoch++ // re-read the palette each time the keyboard shows
         state.message = null
         state.emojiQuery = null
+        state.toolsOpen = false
+        updateClipboardState()
         state.voiceAvailable = voice.isAvailable
         state.enterAction = resolveEnterAction(info)
         state.page = when (info.inputType and InputType.TYPE_MASK_CLASS) {
@@ -331,6 +345,7 @@ class WeftKeyboardService :
 
     override fun onDestroy() {
         voice.stop()
+        clipboard.removePrimaryClipChangedListener(clipListener)
         // super.onDestroy() finishes the input view, which calls onFinishInputView,
         // so it has to run while the lifecycle is still alive.
         super.onDestroy()
@@ -371,6 +386,7 @@ class WeftKeyboardService :
      */
     private fun onSwipe(xs: FloatArray, ys: FloatArray, done: Boolean) {
         val decoder = swipeDecoder ?: return
+        state.toolsOpen = false
         val ctx = typing.context(editor)
         // Context for ranking: the word just before where this one will go.
         val previous = ctx.fragment.ifEmpty { null } ?: ctx.previous
@@ -414,6 +430,7 @@ class WeftKeyboardService :
 
     private fun onKey(key: Key) {
         state.message = null
+        state.toolsOpen = false
         if (state.emojiQuery != null && state.page == KeyboardPage.Emoji) {
             onEmojiSearchKey(key)
             return
@@ -533,6 +550,40 @@ class WeftKeyboardService :
         val ic = currentInputConnection ?: return
         val inputType = currentInputEditorInfo?.inputType ?: return
         state.shift = if (ic.getCursorCapsMode(inputType) != 0) ShiftState.Once else ShiftState.Off
+    }
+
+    // --- Tools row --------------------------------------------------------------------
+
+    private fun updateClipboardState() {
+        state.clipboardHasContent = runCatching { clipboard.hasPrimaryClip() }.getOrDefault(false)
+    }
+
+    /**
+     * Lets the app paste, so it keeps formatting and can accept images; falls
+     * back to typing the clip's text for apps that don't handle the paste action.
+     */
+    private fun paste() {
+        state.toolsOpen = false
+        val ic = currentInputConnection ?: return
+        typing.onInputStarted()
+        if (ic.performContextMenuAction(android.R.id.paste)) return
+        val text = runCatching { clipboard.primaryClip?.getItemAt(0)?.coerceToText(this) }.getOrNull()
+        if (!text.isNullOrEmpty()) ic.commitText(text, 1)
+    }
+
+    private fun clearClipboard() {
+        state.toolsOpen = false
+        runCatching { clipboard.clearPrimaryClip() }
+        updateClipboardState()
+        state.message = getString(R.string.clipboard_cleared)
+    }
+
+    private fun openSettings() {
+        state.toolsOpen = false
+        requestHideSelf(0)
+        startActivity(
+            Intent(this, SettingsActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
     }
 
     // --- Voice -------------------------------------------------------------------------

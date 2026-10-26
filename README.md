@@ -29,6 +29,7 @@ This is the starter scaffold. Working now:
   emoji), and search by name, keyword or shortcode ("joy", "lol", ":thumbsup:",
   "us" for 🇺🇸). Emoji the font can't draw are hidden
 - Setup screen: enable keyboard, switch to it, grant the mic, test field
+- Tools key beside the suggestions: slides out Paste, Clear clipboard and Settings
 - **Suggestions:** typo correction that knows which keys are next to each other,
   word completions, and next-word predictions, in a three-slot strip
 - **Autocorrect** on space or punctuation; delete right after undoes it, and that

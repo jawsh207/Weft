@@ -3,7 +3,12 @@ package app.weft.keyboard.ui
 import android.view.HapticFeedbackConstants
 import android.view.inputmethod.EditorInfo
 import androidx.annotation.DrawableRes
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -32,7 +37,9 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
@@ -90,6 +97,14 @@ private const val KEY_ROWS = 4
 /** Horizontal travel on the space bar per one-character cursor step. */
 private val CursorStep = 12.dp
 
+/** The tools row that slides over the suggestions. */
+class ToolActions(
+    val onToggle: () -> Unit,
+    val onPaste: () -> Unit,
+    val onClearClipboard: () -> Unit,
+    val onSettings: () -> Unit,
+)
+
 /** What keys can do besides being tapped. */
 internal class KeyHandlers(
     val onKey: (Key) -> Unit,
@@ -104,6 +119,7 @@ fun KeyboardScreen(
     state: KeyboardState,
     onKey: (Key) -> Unit,
     emoji: EmojiActions,
+    tools: ToolActions,
     onMic: () -> Unit,
     onSuggestion: (SuggestionChip) -> Unit,
     onAlternate: (String) -> Unit,
@@ -128,7 +144,7 @@ fun KeyboardScreen(
                 .windowInsetsPadding(WindowInsets.navigationBars)
                 .padding(start = KeyGap, end = KeyGap, top = KeyGap, bottom = BottomClearance),
         ) {
-            TopStrip(state, onMic, onSuggestion, emoji)
+            TopStrip(state, onMic, onSuggestion, emoji, tools)
             if (state.page == KeyboardPage.Emoji) {
                 if (state.emojiQuery != null) {
                     EmojiSearch(state, handlers, emoji)
@@ -149,8 +165,10 @@ fun KeyboardScreen(
 }
 
 /**
- * Suggestion strip plus the mic key. Voice status replaces suggestions while
- * listening; on the emoji page the strip holds the emoji search box instead.
+ * Suggestion strip with the tools key on the left and the mic key on the right.
+ * The tools key slides a row (paste, clear clipboard, settings) over the
+ * suggestions. Voice status replaces suggestions while listening; on the emoji
+ * page the strip holds the emoji search box instead.
  */
 @Composable
 private fun TopStrip(
@@ -158,7 +176,9 @@ private fun TopStrip(
     onMic: () -> Unit,
     onSuggestion: (SuggestionChip) -> Unit,
     emoji: EmojiActions,
+    tools: ToolActions,
 ) {
+    val showTools = !state.listening && state.page != KeyboardPage.Emoji
     Row(
         Modifier
             .fillMaxWidth()
@@ -166,7 +186,8 @@ private fun TopStrip(
             .padding(start = 4.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+        if (showTools) ToolsKey(state.toolsOpen, tools.onToggle)
+        Box(Modifier.weight(1f).clip(RoundedCornerShape(20.dp)), contentAlignment = Alignment.CenterStart) {
             when {
                 state.listening -> Row(
                     Modifier.padding(start = 8.dp),
@@ -189,6 +210,14 @@ private fun TopStrip(
                 state.page == KeyboardPage.Emoji -> EmojiSearchPill(state.emojiQuery, emoji.onSearch)
                 state.suggestions.isNotEmpty() -> SuggestionRow(state.suggestions, onSuggestion)
             }
+            val motion = MaterialTheme.motionScheme
+            AnimatedVisibility(
+                visible = showTools && state.toolsOpen,
+                enter = slideInHorizontally(motion.fastSpatialSpec()) { -it } + fadeIn(motion.fastEffectsSpec()),
+                exit = slideOutHorizontally(motion.fastSpatialSpec()) { -it } + fadeOut(motion.fastEffectsSpec()),
+            ) {
+                ToolsRow(state.clipboardHasContent, tools)
+            }
         }
         if (state.voiceAvailable) {
             val description = stringResource(R.string.voice_input)
@@ -206,6 +235,78 @@ private fun TopStrip(
                 }
             }
         }
+    }
+}
+
+/** Chevron that turns to point back once the tools row is out. */
+@Composable
+private fun ToolsKey(open: Boolean, onToggle: () -> Unit) {
+    val rotation by animateFloatAsState(
+        if (open) 180f else 0f,
+        MaterialTheme.motionScheme.fastSpatialSpec(),
+        label = "toolsKey",
+    )
+    val description = stringResource(if (open) R.string.tools_close else R.string.tools_open)
+    IconButton(onClick = onToggle) {
+        Icon(
+            painterResource(R.drawable.ic_chevron_right),
+            description,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.graphicsLayer { rotationZ = rotation },
+        )
+    }
+}
+
+/** Paste, clear clipboard and settings, covering the suggestions. */
+@Composable
+private fun ToolsRow(hasClip: Boolean, tools: ToolActions) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .padding(horizontal = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ToolButton(R.drawable.ic_paste, R.string.tools_paste, R.string.tools_paste, hasClip, tools.onPaste)
+        ToolButton(
+            R.drawable.ic_clipboard_clear,
+            R.string.tools_clear_clipboard,
+            R.string.tools_clear_clipboard_description,
+            hasClip,
+            tools.onClearClipboard,
+        )
+        ToolButton(R.drawable.ic_settings, R.string.tools_settings, R.string.tools_settings_description, true, tools.onSettings)
+    }
+}
+
+@Composable
+private fun RowScope.ToolButton(
+    @DrawableRes icon: Int,
+    label: Int,
+    description: Int,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val spoken = stringResource(description)
+    FilledTonalButton(
+        onClick = onClick,
+        enabled = enabled,
+        contentPadding = PaddingValues(horizontal = 10.dp),
+        modifier = Modifier
+            .weight(1f)
+            .height(40.dp)
+            .semantics { contentDescription = spoken },
+    ) {
+        Icon(painterResource(icon), contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(
+            stringResource(label),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.labelLarge,
+        )
     }
 }
 

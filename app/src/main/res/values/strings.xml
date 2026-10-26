@@ -10,6 +10,14 @@
     <string name="key_space">Space</string>
     <string name="key_emoji">Emoji</string>
     <string name="voice_input">Voice input</string>
+    <string name="tools_open">Show tools</string>
+    <string name="tools_close">Hide tools</string>
+    <string name="tools_paste">Paste</string>
+    <string name="tools_clear_clipboard">Clear</string>
+    <string name="tools_clear_clipboard_description">Clear clipboard</string>
+    <string name="tools_settings">Settings</string>
+    <string name="tools_settings_description">Keyboard settings</string>
+    <string name="clipboard_cleared">Clipboard cleared</string>
     <string name="voice_listening">Listening…</string>
     <string name="voice_no_match">Didn\'t catch that</string>
     <string name="voice_error">Voice input error (%1$d)</string>

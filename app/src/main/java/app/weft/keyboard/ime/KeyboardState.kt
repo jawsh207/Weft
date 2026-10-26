@@ -36,6 +36,12 @@ class KeyboardState {
     /** Swipe typing on the letter keys (off in password fields or if disabled in settings). */
     var swipeEnabled by mutableStateOf(false)
 
+    /** The tools row (paste, clear clipboard, settings) is slid over the suggestions. */
+    var toolsOpen by mutableStateOf(false)
+
+    /** Something is on the clipboard, so Paste and Clear have work to do. */
+    var clipboardHasContent by mutableStateOf(false)
+
     var voiceAvailable by mutableStateOf(false)
     var listening by mutableStateOf(false)
 
