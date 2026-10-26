@@ -26,8 +26,9 @@ Output format (UTF-8, tab separated):
     @Group name
     <emoji>\t<name>\t<skin variants, space separated>\t<keywords, " | " separated>\t<picks>
 
-<picks> are Weft's hand-picked keywords as "keyword#rank" (" | " separated):
-the emoji is that keyword's rank-th best match, and ranks above CLDR matches.
+<picks> are Weft's hand-picked keywords and gemoji shortcodes, as
+"keyword#rank" (" | " separated): the emoji is that keyword's rank-th best
+match, and ranks above name and CLDR matches.
 
 Rules:
 - Only fully-qualified emoji are kept (the forms keyboards should insert).
@@ -156,16 +157,22 @@ def parse_emojilib(text: str) -> dict[tuple[int, ...], list[str]]:
     return out
 
 
-def parse_gemoji(text: str) -> dict[tuple[int, ...], list[str]]:
-    """gemoji db/emoji.json: [{"emoji": "👍", "aliases": ["+1", "thumbsup"], "tags": [...]}]."""
-    out: dict[tuple[int, ...], list[str]] = {}
+def parse_gemoji(text: str):
+    """gemoji db/emoji.json: [{"emoji": "👍", "aliases": ["+1", "thumbsup"], "tags": [...]}].
+
+    Returns (tags as keywords, aliases as picks). A shortcode names exactly one
+    emoji, so it ranks like a hand-picked keyword.
+    """
+    tags: dict[tuple[int, ...], list[str]] = {}
+    shortcodes: dict[tuple[int, ...], list[str]] = {}
     for entry in json.loads(text):
         emoji = entry.get("emoji")
         if not emoji:
             continue
-        words = list(entry.get("aliases", [])) + list(entry.get("tags", []))
-        out.setdefault(key_of(emoji), []).extend(w.replace("_", " ") for w in words)
-    return out
+        k = key_of(emoji)
+        tags.setdefault(k, []).extend(t.replace("_", " ") for t in entry.get("tags", []))
+        shortcodes.setdefault(k, []).extend(f"{a.lower()}#0" for a in entry.get("aliases", []))
+    return tags, shortcodes
 
 
 def read_extra_keywords(path: Path) -> dict[tuple[int, ...], list[str]]:
@@ -277,10 +284,13 @@ def main() -> None:
         else:
             gemoji_json = fetch(GEMOJI_URL)
             licenses["gemoji"] = fetch(GEMOJI_LICENSE_URL)
-        keyword_maps.append(parse_gemoji(gemoji_json))
+        gemoji_tags, gemoji_shortcodes = parse_gemoji(gemoji_json)
+        keyword_maps.append(gemoji_tags)
         sources.append("GitHub gemoji")
     keywords = add_keywords(by_key, keyword_maps)
     keywords += add_picks(by_key, read_extra_keywords(Path(args.extra_keywords)))
+    if not args.no_community:
+        keywords += add_picks(by_key, gemoji_shortcodes)
     sources.append("Weft extra_keywords.tsv")
 
     out = Path(args.out)

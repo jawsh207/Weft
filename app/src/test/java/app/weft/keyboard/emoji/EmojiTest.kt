@@ -77,6 +77,8 @@ class EmojiTest {
         assertEquals("❤️", catalog.search("valentines").first().base)
         assertEquals("👍", catalog.search("thumbsup").first().base)
         assertEquals("👍", catalog.search(":thumbsup:").first().base)
+        assertEquals("😂", catalog.search(":joy:").first().base) // shortcode beats "joy" in other names
+        assertEquals("👍", catalog.search("+1").first().base)
         assertEquals("👍", catalog.search("approve").first().base)
         // Hand-picked keywords keep their listed order.
         assertEquals(listOf("🍕", "❤️"), catalog.search("food").map { it.base })

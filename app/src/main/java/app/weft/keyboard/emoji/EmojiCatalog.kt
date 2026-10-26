@@ -6,7 +6,7 @@ data class Emoji(
     val name: String,
     val variants: List<String> = emptyList(),
     val keywords: List<String> = emptyList(),
-    /** Weft's hand-picked keywords → rank (0 = best match for that keyword). */
+    /** Hand-picked keywords and shortcodes → rank (0 = best match for that keyword). */
     val picks: Map<String, Int> = emptyMap(),
 )
 
@@ -35,13 +35,14 @@ class EmojiCatalog(val groups: List<EmojiGroup>) {
     /**
      * Search by name and keyword. Every word typed must start a word of the
      * emoji's name or keywords ("thu up" finds "thumbs up", "lol" finds 😂).
-     * Ranking: exact name, Weft's hand-picked keywords (in their listed order,
-     * so "lol" → 😂 🤣), whole words in the name, an exact CLDR keyword, name
-     * prefix, then anything else; shorter names first within each, so the plain
-     * emoji leads ("heart" → ❤️ before 💘).
+     * Ranking: exact name, hand-picked keywords and shortcodes (in their listed
+     * order, so "lol" → 😂 🤣 and ":joy:" → 😂), whole words in the name, an
+     * exact keyword, name prefix, then anything else; shorter names first within
+     * each, so the plain emoji leads ("heart" → ❤️ before 💘). Colons around a
+     * shortcode are ignored.
      */
     fun search(query: String, limit: Int = 60): List<Emoji> {
-        val q = query.trim().lowercase()
+        val q = query.trim().lowercase().trim(':')
         if (q.isEmpty()) return emptyList()
         val tokens = q.split(WORD_BREAK).filter { it.isNotEmpty() }
         return all.asSequence()
