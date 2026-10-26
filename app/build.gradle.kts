@@ -1,14 +1,14 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
 }
 
 android {
     namespace = "app.weft.keyboard"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "app.weft.keyboard"
@@ -54,7 +54,7 @@ android {
     }
 }
 
-kotlin {
+tasks.withType<KotlinCompile>().configureEach {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
         optIn.add("androidx.compose.material3.ExperimentalMaterial3ExpressiveApi")

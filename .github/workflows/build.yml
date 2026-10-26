@@ -33,7 +33,8 @@ jobs:
       - name: Install Android SDK packages
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0"
+          # AGP also downloads missing SDK parts itself, so a naming mismatch here isn't fatal.
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37" "build-tools;36.0.0" || true
 
       - uses: gradle/actions/setup-gradle@v4
 
@@ -54,7 +55,8 @@ jobs:
           for f in gradle-test.log gradle-assemble.log; do
             [ -f "$f" ] || continue
             grep -E "^e: |error:|What went wrong|Could not |Unresolved|expected:|FAILED|Exception|^> |Dependency |requires|compileSdk|Android Gradle plugin|issues? (was|were) found" "$f" \
-              | grep -vE "^> Task [^ ]+( (UP-TO-DATE|NO-SOURCE|FROM-CACHE|SKIPPED))?$" | head -48 > "$f.errors" || true
+              | grep -vE "^> Task [^ ]+( (UP-TO-DATE|NO-SOURCE|FROM-CACHE|SKIPPED))?$" | head -40 > "$f.errors" || true
+            grep -A4 "What went wrong" "$f" | head -10 >> "$f.errors" || true
             python3 - "$f" <<'PY'
           import sys
           name = sys.argv[1]

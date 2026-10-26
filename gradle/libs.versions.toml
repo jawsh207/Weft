@@ -2,11 +2,12 @@
 # no Google Play Services, Firebase, or closed-source libraries.
 #
 # Pinned versions. Material3 1.5 is required: the Expressive APIs (MaterialExpressiveTheme,
-# MotionScheme, LoadingIndicator) are internal in 1.4. Upgrading is fine.
+# MotionScheme, LoadingIndicator) are internal in 1.4. Compose 1.12 / Material3 1.5 need
+# AGP 9.1+ and compileSdk 37. AGP 9 compiles Kotlin itself; `kotlin` pins the KGP version.
 
 [versions]
-agp = "8.13.0"
-kotlin = "2.2.20"
+agp = "9.1.1"
+kotlin = "2.3.20"
 coreKtx = "1.16.0"
 activityCompose = "1.10.1"
 lifecycle = "2.9.2"
@@ -29,8 +30,8 @@ compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling", version.ref = 
 compose-material3 = { module = "androidx.compose.material3:material3", version.ref = "material3" }
 
 junit = { module = "junit:junit", version.ref = "junit" }
+kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
