@@ -107,6 +107,8 @@ class Suggester(
         }
 
         val typedIsKnown = isKnown(typed)
+        if (dict != null && !typedIsKnown) splits(dict, typed, prevNode).forEach(::offer)
+
         val ranked = found.values
             .map { it.copy(word = matchCase(it.word, typed)) }
             .filter { it.word != typed }
@@ -170,26 +172,72 @@ class Suggester(
         return s
     }
 
+    /**
+     * What space should insert for an unknown word: the best suggestion, which is
+     * also what the strip shows in the middle. Completions count too, so
+     * "keyb" + space gives "keyboard". Returns null (keep as typed) when nothing
+     * is a confident match.
+     */
     private fun pickAutocorrect(length: Int, ranked: List<Suggestion>): Suggestion? {
         // An unknown word that differs from a real one only by case, accents or an
         // apostrophe ("im" → "I'm", "monday" → "Monday") is almost certainly that word.
-        ranked.firstOrNull { it.kind == SuggestionKind.Exact }?.let { return it }
+        // But not a rare one ("th" shouldn't become the abbreviation "Th" when "the" is right there).
         val best = ranked.firstOrNull() ?: return null
-        if (best.kind == SuggestionKind.Completion || best.kind == SuggestionKind.Prediction) return null
+        ranked.firstOrNull { it.kind == SuggestionKind.Exact }
+            ?.takeIf { it.score >= best.score - EXACT_PRIORITY }
+            ?.let { return it }
+        if (best.kind == SuggestionKind.Prediction) return null
         val maxCost = when {
             length <= 2 -> 0.5f
             length <= 4 -> 1.0f
             else -> 1.6f
         }
         if (best.cost > maxCost) return null
-        if (best.score < MIN_AUTOCORRECT_SCORE) return null
-        val runnerUp = ranked.getOrNull(1)
-        if (runnerUp != null && runnerUp.kind != SuggestionKind.Completion &&
-            best.score - runnerUp.score < AUTOCORRECT_MARGIN && best.cost >= runnerUp.cost
-        ) {
-            return null // too close to call
-        }
+        val minScore = if (best.kind == SuggestionKind.Completion) MIN_COMPLETION_SCORE else MIN_AUTOCORRECT_SCORE
+        if (best.score < minScore) return null
         return best
+    }
+
+    /**
+     * Two or three words typed without spaces ("letgo" → "let go",
+     * "iloveyou" → "I love you"). Every part must be a reasonably common word,
+     * so rare fragments don't produce nonsense splits.
+     */
+    private fun splits(dict: BinaryDictionary, typed: String, prevNode: Int): List<Suggestion> {
+        val cps = typed.codePoints().toArray()
+        if (cps.size < 3 || typed.any { !it.isLetter() && it != '\'' }) return emptyList()
+
+        fun part(from: Int, to: Int): Int {
+            val text = String(cps, from, to - from)
+            val single = to - from == 1
+            if (single && text.lowercase() != "a" && text.lowercase() != "i") return -1
+            val node = dict.findIgnoreCase(text)
+            return if (node < 0 || dict.isOffensive(node) || dict.freq(node) < MIN_SPLIT_FREQ) -1 else node
+        }
+
+        fun suggestion(nodes: List<Int>): Suggestion {
+            var score = nodes.minOf { dict.freq(it) } / 25.5f - SPLIT_COST * (nodes.size - 1) * COST_WEIGHT
+            for (i in 1 until nodes.size) score += dict.bigramStrength(nodes[i - 1], nodes[i]) / 255f * BIGRAM_WEIGHT
+            if (prevNode >= 0) score += dict.bigramStrength(prevNode, nodes[0]) / 255f * BIGRAM_WEIGHT
+            val text = nodes.joinToString(" ") { dict.word(it) }
+            return Suggestion(text, SuggestionKind.Correction, score, SPLIT_COST * (nodes.size - 1))
+        }
+
+        val n = cps.size
+        val out = ArrayList<Suggestion>()
+        for (i in 1 until n) {
+            val a = part(0, i)
+            if (a < 0) continue
+            val b = part(i, n)
+            if (b >= 0) out += suggestion(listOf(a, b))
+            for (j in i + 1 until n) {
+                val mid = part(i, j)
+                if (mid < 0) continue
+                val c = part(j, n)
+                if (c >= 0) out += suggestion(listOf(a, mid, c))
+            }
+        }
+        return out.sortedByDescending { it.score }.take(2)
     }
 
     // --- Trie search -------------------------------------------------------------------------
@@ -319,7 +367,15 @@ class Suggester(
         const val COMPLETION_PENALTY = 1.2f
         const val BIGRAM_WEIGHT = 3f
         const val MIN_AUTOCORRECT_SCORE = 0.75f
-        const val AUTOCORRECT_MARGIN = 0.6f
+
+        /** Completions need more confidence than corrections before space inserts them. */
+        const val MIN_COMPLETION_SCORE = 1.5f
+
+        /** A case/accent/apostrophe-only match wins unless something scores this much higher. */
+        const val EXACT_PRIORITY = 2f
+
+        const val SPLIT_COST = 0.5f
+        const val MIN_SPLIT_FREQ = 100
 
         /** How much more frequent (log scale, 13 ≈ 2×) a contraction must be to replace a real word. */
         const val CONTRACTION_MARGIN = 50

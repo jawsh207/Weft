@@ -100,6 +100,33 @@ class TypingControllerTest {
     }
 
     @Test
+    fun spaceInsertsMiddleSuggestion() {
+        type("keyb")
+        val chips = controller.publish(controller.compute(controller.context(editor)))
+        assertEquals("keyboard", chips[1]?.text)
+        controller.onSeparator(editor, " ")
+        assertEquals("keyboard ", editor.toString())
+    }
+
+    @Test
+    fun spaceSplitsRunTogetherWords() {
+        type("letgo")
+        controller.onSeparator(editor, " ")
+        assertEquals("let go ", editor.toString())
+        assertTrue(controller.onBackspace(editor))
+        assertEquals("letgo ", editor.toString())
+    }
+
+    @Test
+    fun knownWordStaysInMiddle() {
+        type("the")
+        val chips = controller.publish(controller.compute(controller.context(editor)))
+        assertEquals(SuggestionChip("the", ChipStyle.Normal), chips[1])
+        controller.onSeparator(editor, " ")
+        assertEquals("the ", editor.toString())
+    }
+
+    @Test
     fun respectsAutocorrectSetting() {
         controller.autocorrectEnabled = false
         type("teh")

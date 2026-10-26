@@ -133,11 +133,29 @@ class SuggesterTest {
     // --- Completions and predictions ------------------------------------------------------
 
     @Test
-    fun completesPrefixWithoutAutocorrecting() {
+    fun completesPrefixOnSpace() {
         val r = suggester.suggest("keyb", null)
         assertEquals("keyboard", r.suggestions.first().word)
         assertEquals(SuggestionKind.Completion, r.suggestions.first().kind)
-        assertNull(r.autocorrect)
+        assertEquals("keyboard", r.autocorrect?.word)
+    }
+
+    @Test
+    fun splitsRunTogetherWords() {
+        assertAutocorrect("letgo", "let go")
+        assertAutocorrect("Letgo", "Let go")
+    }
+
+    @Test
+    fun doesNotSplitRealWords() {
+        val r = suggester.suggest("keyboard", null)
+        assertTrue(r.typedIsKnown)
+        assertFalse(r.suggestions.any { it.word == "key board" })
+    }
+
+    @Test
+    fun keepsUnknownWordWithNoConfidentMatch() {
+        assertNull(suggester.suggest("Zorblax", null).autocorrect)
     }
 
     @Test

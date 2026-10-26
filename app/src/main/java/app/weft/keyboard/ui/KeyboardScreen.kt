@@ -77,6 +77,9 @@ import app.weft.keyboard.layout.Layouts
 
 private val RowHeight = 54.dp
 private val KeyGap = 3.dp
+
+/** Space between the bottom row and the system navigation bar / IME switcher. */
+private val BottomClearance = 14.dp
 private const val KEY_ROWS = 4
 
 @Composable
@@ -92,7 +95,7 @@ fun KeyboardScreen(
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surfaceContainer)
             .windowInsetsPadding(WindowInsets.navigationBars)
-            .padding(horizontal = KeyGap, vertical = KeyGap),
+            .padding(start = KeyGap, end = KeyGap, top = KeyGap, bottom = BottomClearance),
     ) {
         TopStrip(state, onMic, onSuggestion)
         if (state.page == KeyboardPage.Emoji) {

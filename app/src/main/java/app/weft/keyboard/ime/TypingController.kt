@@ -78,6 +78,11 @@ class TypingController(private val learned: LearnedWords) {
         return chips(result)
     }
 
+    /**
+     * Three slots. While typing, the middle slot is always exactly what space
+     * will insert: the correction or completion if there is one, otherwise the
+     * word as typed.
+     */
     fun chips(result: SuggestionResult): List<SuggestionChip?> {
         if (!suggestionsEnabled) return emptyList()
         val words = result.suggestions.map { it.word }
@@ -92,15 +97,13 @@ class TypingController(private val learned: LearnedWords) {
                 alt,
             )
         }
-        if (!result.typedIsKnown) {
-            // Offer to keep the unknown word as typed, plus the two best alternatives.
-            return listOf(
-                SuggestionChip(result.typed, ChipStyle.Verbatim),
-                words.getOrNull(0)?.let { SuggestionChip(it) },
-                words.getOrNull(1)?.let { SuggestionChip(it) },
-            )
-        }
-        return centered(words.map { SuggestionChip(it) })
+        // Space keeps the typed word, so it goes in the middle.
+        val typedStyle = if (result.typedIsKnown) ChipStyle.Normal else ChipStyle.Verbatim
+        return listOf(
+            words.getOrNull(0)?.let { SuggestionChip(it) },
+            SuggestionChip(result.typed, typedStyle),
+            words.getOrNull(1)?.let { SuggestionChip(it) },
+        )
     }
 
     /** Best in the middle, like most keyboards: [2nd, 1st, 3rd]. */
