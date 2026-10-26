@@ -558,7 +558,7 @@ private fun KeyButton(
                                             break
                                         }
                                         change.consume()
-                                        handlers.popup.track(bounds.left + change.position.x)
+                                        handlers.popup.track(bounds.left + change.position.x, bounds.top + change.position.y)
                                     }
                                 }
                             }
