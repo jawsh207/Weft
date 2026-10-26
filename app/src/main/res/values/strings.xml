@@ -39,6 +39,8 @@
     <string name="settings_suggestions_body">Word suggestions and next-word predictions above the keys.</string>
     <string name="settings_autocorrect">Autocorrect</string>
     <string name="settings_autocorrect_body">Fix typos when you press space. Press delete right after to undo.</string>
+    <string name="settings_swipe">Swipe typing</string>
+    <string name="settings_swipe_body">Slide across the letters to type a word, lifting between words. Spaces are added for you; delete removes the whole word.</string>
     <string name="settings_learn">Learn new words</string>
     <string name="settings_learn_body">Remember words you use that aren\'t in the dictionary. Stored only on this device, never in password or incognito fields.</string>
     <string name="settings_clear_learned">Clear learned words</string>

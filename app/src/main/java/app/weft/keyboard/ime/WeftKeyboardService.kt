@@ -41,12 +41,14 @@ import app.weft.keyboard.layout.Layouts
 import app.weft.keyboard.predict.KeyProximity
 import app.weft.keyboard.predict.LearnedWords
 import app.weft.keyboard.predict.Suggester
+import app.weft.keyboard.predict.SwipeDecoder
 import app.weft.keyboard.predict.TextContext
 import app.weft.keyboard.settings.Prefs
 import app.weft.keyboard.settings.autocorrect
 import app.weft.keyboard.settings.learnWords
 import app.weft.keyboard.settings.learnedReset
 import app.weft.keyboard.settings.showSuggestions
+import app.weft.keyboard.settings.swipeTyping
 import app.weft.keyboard.settings.SettingsActivity
 import app.weft.keyboard.theme.SystemTheme
 import app.weft.keyboard.ui.EmojiActions
@@ -90,6 +92,11 @@ class WeftKeyboardService :
     private var lastShiftTap = 0L
     private var voicePrefix = ""
     private var suggestJob: Job? = null
+    private var swipeJob: Job? = null
+
+    @Volatile
+    private var swipeDecoder: SwipeDecoder? = null
+    private var swipeAllowed = false
     private var learnedResetSeen = 0
 
     /** The current text field, for [TypingController]. */
@@ -194,9 +201,12 @@ class WeftKeyboardService :
                 learnedResetSeen = Prefs.of(this@WeftKeyboardService).learnedReset()
                 learned.setSystemWords(DictionaryLoader.systemUserWords(this@WeftKeyboardService))
                 val dict = DictionaryLoader.load(this@WeftKeyboardService, locale)
-                Suggester(dict, KeyProximity(KeyGeometry.centers(Layouts.qwerty)), learned)
+                val centers = KeyGeometry.centers(Layouts.qwerty)
+                swipeDecoder = SwipeDecoder(dict, centers, learned)
+                Suggester(dict, KeyProximity(centers), learned)
             }
             typing.suggester = suggester
+            state.swipeEnabled = swipeAllowed && swipeDecoder != null
             refreshSuggestions()
         }
     }
@@ -229,6 +239,7 @@ class WeftKeyboardService :
                         onSuggestion = ::onSuggestion,
                         onAlternate = ::onAlternate,
                         onCursor = ::moveCursor,
+                        onSwipe = ::onSwipe,
                     )
                 }
             }
@@ -275,6 +286,9 @@ class WeftKeyboardService :
         typing.suggestionsEnabled = prefs.showSuggestions() && isText && !isPassword && !noSuggestions
         typing.autocorrectEnabled = prefs.autocorrect() && !technical
         typing.learningEnabled = prefs.learnWords() && !isPassword && !noLearning
+        // Swipe needs a text field it may predict in (never passwords or URLs).
+        swipeAllowed = prefs.swipeTyping() && isText && !isPassword && !technical
+        state.swipeEnabled = swipeAllowed && swipeDecoder != null
 
         val reset = prefs.learnedReset()
         if (reset != learnedResetSeen) {
@@ -346,6 +360,45 @@ class WeftKeyboardService :
             val result = withContext(Dispatchers.Default) { typing.compute(ctx) }
             state.suggestions = typing.publish(result)
         }
+    }
+
+    /**
+     * A swipe in progress ([done] = false: preview the best guess in the strip)
+     * or finished (type it). Points are in key units from [SwipeArea].
+     */
+    private fun onSwipe(xs: FloatArray, ys: FloatArray, done: Boolean) {
+        val decoder = swipeDecoder ?: return
+        val ctx = typing.context(editor)
+        // Context for ranking: the word just before where this one will go.
+        val previous = ctx.fragment.ifEmpty { null } ?: ctx.previous
+        swipeJob?.cancel()
+        if (done) {
+            suggestJob?.cancel()
+            val words = decoder.decode(xs, ys, previous).map { applyShift(it.word) }
+            if (words.isEmpty()) return
+            state.message = null
+            typing.onSwipe(editor, words)
+            if (state.shift == ShiftState.Once) state.shift = ShiftState.Off
+            return
+        }
+        swipeJob = lifecycleScope.launch {
+            val words = withContext(Dispatchers.Default) { decoder.decode(xs, ys, previous) }
+                .map { applyShift(it.word) }
+            if (words.isNotEmpty()) {
+                state.suggestions = listOf(
+                    words.getOrNull(1)?.let { SuggestionChip(it) },
+                    SuggestionChip(words[0], ChipStyle.Autocorrect),
+                    words.getOrNull(2)?.let { SuggestionChip(it) },
+                )
+            }
+        }
+    }
+
+    /** Shift capitalizes a swiped word; caps lock uppercases it. */
+    private fun applyShift(word: String): String = when (state.shift) {
+        ShiftState.Off -> word
+        ShiftState.Once -> word.replaceFirstChar { it.titlecase() }
+        ShiftState.Locked -> word.uppercase()
     }
 
     private fun onSuggestion(chip: SuggestionChip) {

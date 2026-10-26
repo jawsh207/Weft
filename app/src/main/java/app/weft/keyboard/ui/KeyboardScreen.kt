@@ -95,6 +95,8 @@ internal class KeyHandlers(
     val onKey: (Key) -> Unit,
     val onCursor: (Int) -> Unit,
     val popup: AlternatesPopup,
+    /** Swipe points in key units; done = finger lifted (commit), otherwise a live preview. */
+    val onSwipe: (xs: FloatArray, ys: FloatArray, done: Boolean) -> Unit,
 )
 
 @Composable
@@ -106,11 +108,12 @@ fun KeyboardScreen(
     onSuggestion: (SuggestionChip) -> Unit,
     onAlternate: (String) -> Unit,
     onCursor: (Int) -> Unit,
+    onSwipe: (FloatArray, FloatArray, Boolean) -> Unit,
 ) {
     val popup = remember { AlternatesPopup() }
     val currentOnAlternate by rememberUpdatedState(onAlternate)
     popup.onPick = { currentOnAlternate(it) }
-    val handlers = KeyHandlers(onKey, onCursor, popup)
+    val handlers = KeyHandlers(onKey, onCursor, popup, onSwipe)
 
     // The Box is the coordinate root for the long-press popup.
     Box(
@@ -133,7 +136,12 @@ fun KeyboardScreen(
                     EmojiPicker(state, handlers, emoji)
                 }
             } else {
-                Layouts.rowsFor(state.page).forEach { row -> KeyRowView(row, state, handlers) }
+                val rows = Layouts.rowsFor(state.page)
+                if (state.page == KeyboardPage.Letters && state.swipeEnabled) {
+                    SwipeArea(rows, state, handlers)
+                } else {
+                    rows.forEach { row -> KeyRowView(row, state, handlers) }
+                }
             }
         }
         AlternatesOverlay(popup)

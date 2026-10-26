@@ -127,6 +127,43 @@ class TypingControllerTest {
     }
 
     @Test
+    fun swipedWordsGetSpacedAutomatically() {
+        controller.onSwipe(editor, listOf("hello", "help"))
+        assertEquals("hello", editor.toString())
+        controller.onSwipe(editor, listOf("there"))
+        assertEquals("hello there", editor.toString())
+        controller.onText(editor, "x") // tapping after a swipe starts a new word
+        assertEquals("hello there x", editor.toString())
+    }
+
+    @Test
+    fun punctuationAttachesToSwipedWord() {
+        controller.onSwipe(editor, listOf("hello"))
+        controller.onSeparator(editor, ".")
+        assertEquals("hello.", editor.toString())
+    }
+
+    @Test
+    fun deleteRemovesWholeSwipedWord() {
+        editor.insert("I said")
+        controller.onSwipe(editor, listOf("hello"))
+        assertEquals("I said hello", editor.toString())
+        assertTrue(controller.onBackspace(editor))
+        assertEquals("I said ", editor.toString())
+    }
+
+    @Test
+    fun stripOffersOtherGuessesAndSwaps() {
+        controller.onSwipe(editor, listOf("for", "four", "fir"))
+        val chips = controller.publish(controller.compute(controller.context(editor)))
+        assertEquals(listOf("four", "for", "fir"), chips.map { it?.text })
+        controller.onPick(editor, chips[0]!!)
+        assertEquals("four", editor.toString())
+        controller.onSwipe(editor, listOf("seasons"))
+        assertEquals("four seasons", editor.toString())
+    }
+
+    @Test
     fun respectsAutocorrectSetting() {
         controller.autocorrectEnabled = false
         type("teh")

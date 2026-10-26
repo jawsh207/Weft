@@ -33,6 +33,9 @@ class KeyboardState {
     /** Text typed into emoji search; null when not searching. */
     var emojiQuery by mutableStateOf<String?>(null)
 
+    /** Swipe typing on the letter keys (off in password fields or if disabled in settings). */
+    var swipeEnabled by mutableStateOf(false)
+
     var voiceAvailable by mutableStateOf(false)
     var listening by mutableStateOf(false)
 

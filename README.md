@@ -38,6 +38,9 @@ This is the starter scaffold. Working now:
   personalized learning (incognito)
 - Smart spacing: picking a suggestion adds a space; typing `.` or `,` next
   moves it after the punctuation
+- **Swipe typing** with Weft's own open source decoder: a trail follows your
+  finger, the best guess previews live, other guesses wait in the strip, and
+  delete removes a swiped word whole. See [docs/swipe-typing.md](docs/swipe-typing.md)
 
 ## Download
 
@@ -65,7 +68,7 @@ Unit tests (prediction engine and typing behavior): `./gradlew test`.
 ```
 app/src/main/java/app/weft/keyboard/
 ├── ime/        WeftKeyboardService (the IME), TypingController, KeyboardState
-├── predict/    Dictionary reader, fuzzy search, ranking, learned words (no Android deps)
+├── predict/    Dictionary, fuzzy search, ranking, learned words, swipe decoder (no Android deps)
 ├── layout/     Key model, page layouts and key geometry
 ├── ui/         Compose keyboard, key button with Expressive motion
 ├── theme/      SystemTheme: dynamic color + MaterialExpressiveTheme
@@ -82,7 +85,9 @@ app/src/main/java/app/weft/keyboard/
 3. **Long-press alternates** — accented letters and key popups.
 4. **Settings** — haptics, key height, on-device voice preference, number row.
 5. **Large screens** — floating, one-handed and split layouts for tablets and foldables.
-6. **Gesture typing** — swipe path capture and decoding against the shared key geometry.
+6. ~~Gesture typing~~ — first version done. Improvements to come back to
+   (learning from real use, ML decoder, timing, multi-word swipes) are listed in
+   [docs/swipe-typing.md](docs/swipe-typing.md#future-improvements).
 7. **More languages** — layouts and dictionaries per subtype.
 
 ## FOSS rules for this repo

@@ -288,6 +288,7 @@ private fun TypingSettings() {
     var suggestions by remember { mutableStateOf(prefs.getBoolean(Prefs.SHOW_SUGGESTIONS, true)) }
     var autocorrect by remember { mutableStateOf(prefs.getBoolean(Prefs.AUTOCORRECT, true)) }
     var learn by remember { mutableStateOf(prefs.getBoolean(Prefs.LEARN_WORDS, true)) }
+    var swipe by remember { mutableStateOf(prefs.getBoolean(Prefs.SWIPE, true)) }
     val learnedFile = remember { File(context.filesDir, "learned_words.tsv") }
     var learnedCount by remember { mutableIntStateOf(countLines(learnedFile)) }
 
@@ -299,6 +300,10 @@ private fun TypingSettings() {
         SwitchRow(stringResource(R.string.settings_autocorrect), stringResource(R.string.settings_autocorrect_body), autocorrect, enabled = suggestions) {
             autocorrect = it
             prefs.edit { putBoolean(Prefs.AUTOCORRECT, it) }
+        }
+        SwitchRow(stringResource(R.string.settings_swipe), stringResource(R.string.settings_swipe_body), swipe) {
+            swipe = it
+            prefs.edit { putBoolean(Prefs.SWIPE, it) }
         }
         SwitchRow(stringResource(R.string.settings_learn), stringResource(R.string.settings_learn_body), learn) {
             learn = it
