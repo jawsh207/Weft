@@ -157,6 +157,8 @@ class WeftKeyboardService :
                         onEmoji = ::commitKeyText,
                         onMic = ::onMic,
                         onSuggestion = ::onSuggestion,
+                        onAlternate = ::onAlternate,
+                        onCursor = ::moveCursor,
                     )
                 }
             }
@@ -173,7 +175,7 @@ class WeftKeyboardService :
         state.enterAction = resolveEnterAction(info)
         state.page = when (info.inputType and InputType.TYPE_MASK_CLASS) {
             InputType.TYPE_CLASS_NUMBER,
-            InputType.TYPE_CLASS_PHONE,
+            InputType.TYPE_CLASS_PHONE -> KeyboardPage.Numpad
             InputType.TYPE_CLASS_DATETIME -> KeyboardPage.Symbols
             else -> KeyboardPage.Letters
         }
@@ -305,8 +307,24 @@ class WeftKeyboardService :
             KeyAction.ToLetters -> state.page = KeyboardPage.Letters
             KeyAction.ToSymbols -> state.page = KeyboardPage.Symbols
             KeyAction.ToMoreSymbols -> state.page = KeyboardPage.MoreSymbols
+            KeyAction.ToNumpad -> state.page = KeyboardPage.Numpad
             KeyAction.Emoji -> state.page = KeyboardPage.Emoji
         }
+    }
+
+    /** A long-press alternate ("é", "…") is typed like the key it came from. */
+    private fun onAlternate(text: String) {
+        state.message = null
+        commitKeyText(text)
+        if (state.shift == ShiftState.Once) state.shift = ShiftState.Off
+    }
+
+    /** Space-bar slide: move the cursor [steps] characters (negative = left). */
+    private fun moveCursor(steps: Int) {
+        if (steps == 0) return
+        typing.onInputStarted() // the word being typed is no longer the one at the cursor
+        val key = if (steps < 0) KeyEvent.KEYCODE_DPAD_LEFT else KeyEvent.KEYCODE_DPAD_RIGHT
+        repeat(kotlin.math.abs(steps)) { sendDownUpKeyEvents(key) }
     }
 
     /** Punctuation and emoji end the current word (and may autocorrect it). */

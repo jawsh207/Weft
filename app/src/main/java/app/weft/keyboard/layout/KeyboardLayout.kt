@@ -2,8 +2,8 @@ package app.weft.keyboard.layout
 
 /**
  * Key model shared by tap typing now and gesture typing later: every key has a
- * width weight, and each row's weights add up to the same total (10) so key
- * geometry is predictable for swipe-path matching.
+ * width weight, and the rows of a page add up to the same total so key geometry
+ * is predictable for swipe-path matching.
  */
 sealed interface Key {
     val weight: Float
@@ -13,6 +13,8 @@ data class CharKey(
     val label: String,
     val output: String = label,
     override val weight: Float = 1f,
+    /** Drawn in the function-key color (operators and punctuation on the number pad). */
+    val secondary: Boolean = false,
 ) : Key
 
 data class ActionKey(
@@ -31,21 +33,33 @@ enum class KeyAction {
     ToLetters,
     ToSymbols,
     ToMoreSymbols,
+    ToNumpad,
     Emoji,
 }
 
-enum class KeyboardPage { Letters, Symbols, MoreSymbols, Emoji }
+enum class KeyboardPage { Letters, Symbols, MoreSymbols, Numpad, Emoji }
 
 typealias KeyRow = List<Key>
 
 object Layouts {
     private fun chars(s: String): List<Key> = s.map { CharKey(it.toString()) }
 
-    private fun bottomRow(switchTo: KeyAction): KeyRow = listOf(
-        ActionKey(switchTo, 1.5f),
+    private fun letterBottomRow(): KeyRow = listOf(
+        ActionKey(KeyAction.ToSymbols, 1.5f),
         CharKey(","),
         ActionKey(KeyAction.Emoji),
         ActionKey(KeyAction.Space, 4f),
+        CharKey("."),
+        ActionKey(KeyAction.Enter, 1.5f),
+    )
+
+    /** Symbol pages swap the emoji key for the number pad and put "/" beside space. */
+    private fun symbolBottomRow(): KeyRow = listOf(
+        ActionKey(KeyAction.ToLetters, 1.5f),
+        CharKey(","),
+        ActionKey(KeyAction.ToNumpad),
+        ActionKey(KeyAction.Space, 3f),
+        CharKey("/"),
         CharKey("."),
         ActionKey(KeyAction.Enter, 1.5f),
     )
@@ -55,24 +69,44 @@ object Layouts {
         listOf(Gap(0.5f)) + chars("asdfghjkl") + Gap(0.5f),
         listOf(ActionKey(KeyAction.Shift, 1.5f)) + chars("zxcvbnm") +
             ActionKey(KeyAction.Backspace, 1.5f),
-        bottomRow(KeyAction.ToSymbols),
+        letterBottomRow(),
     )
 
     val symbols: List<KeyRow> = listOf(
         chars("1234567890"),
-        chars("@#\$_&-+()/"),
+        chars("@#\$_%&-+()"),
         listOf(ActionKey(KeyAction.ToMoreSymbols, 1.5f)) + chars("*\"':;!?") +
             ActionKey(KeyAction.Backspace, 1.5f),
-        bottomRow(KeyAction.ToLetters),
+        symbolBottomRow(),
     )
 
     val moreSymbols: List<KeyRow> = listOf(
         chars("~`|•√π÷×¶∆"),
         chars("£¢€¥^°={}\\"),
-        listOf(ActionKey(KeyAction.ToSymbols, 1.5f)) + chars("%©®™✓[]") +
+        listOf(ActionKey(KeyAction.ToSymbols, 1.5f)) + chars("©®™[]<>") +
             ActionKey(KeyAction.Backspace, 1.5f),
-        bottomRow(KeyAction.ToLetters),
+        symbolBottomRow(),
     )
+
+    /** Phone-style number pad: operators down the left, digits in a 3×3 grid. */
+    val numpad: List<KeyRow> = run {
+        fun digit(d: String) = CharKey(d, weight = 2.25f)
+        fun side(s: String) = CharKey(s, weight = 1.5f, secondary = true)
+        listOf(
+            listOf(side("+"), digit("1"), digit("2"), digit("3"), side("%")),
+            listOf(side("-"), digit("4"), digit("5"), digit("6"), ActionKey(KeyAction.Space, 1.5f)),
+            listOf(side("*"), digit("7"), digit("8"), digit("9"), ActionKey(KeyAction.Backspace, 1.5f)),
+            listOf(
+                ActionKey(KeyAction.ToLetters, 1.5f),
+                CharKey(",", secondary = true),
+                ActionKey(KeyAction.ToSymbols, 1.25f),
+                digit("0"),
+                CharKey("=", weight = 1.25f, secondary = true),
+                CharKey(".", secondary = true),
+                ActionKey(KeyAction.Enter, 1.5f),
+            ),
+        )
+    }
 
     /** Bottom row shown under the emoji panel. */
     val emojiBottom: KeyRow = listOf(
@@ -85,6 +119,52 @@ object Layouts {
         KeyboardPage.Letters -> qwerty
         KeyboardPage.Symbols -> symbols
         KeyboardPage.MoreSymbols -> moreSymbols
+        KeyboardPage.Numpad -> numpad
         KeyboardPage.Emoji -> emptyList()
     }
+
+    /**
+     * Long-press alternates, in popup order. Top-row letters start with their
+     * digit (like most keyboards), then accented forms.
+     */
+    private val alternates: Map<String, List<String>> = mapOf(
+        "q" to listOf("1"),
+        "w" to listOf("2", "ŵ"),
+        "e" to listOf("3", "è", "é", "ê", "ë", "ē", "ę", "ė"),
+        "r" to listOf("4", "ř"),
+        "t" to listOf("5", "ť", "þ"),
+        "y" to listOf("6", "ý", "ÿ", "ŷ"),
+        "u" to listOf("7", "ù", "ú", "û", "ü", "ū", "ů"),
+        "i" to listOf("8", "ì", "í", "î", "ï", "ī", "į", "ı"),
+        "o" to listOf("9", "ò", "ó", "ô", "ö", "õ", "ø", "ō", "œ"),
+        "p" to listOf("0"),
+        "a" to listOf("à", "á", "â", "ä", "ã", "å", "ā", "ą", "æ"),
+        "s" to listOf("ß", "ś", "š", "ş"),
+        "d" to listOf("ď", "ð"),
+        "g" to listOf("ğ"),
+        "l" to listOf("ł", "ľ"),
+        "z" to listOf("ž", "ź", "ż"),
+        "c" to listOf("ç", "ć", "č"),
+        "n" to listOf("ñ", "ń", "ň"),
+        "." to listOf("…", "?", "!", "'", "\"", ":", ";", "-", "@", "/"),
+        "," to listOf("'", "\"", ";", ":"),
+        "?" to listOf("¿", "‽"),
+        "!" to listOf("¡"),
+        "$" to listOf("€", "£", "¥", "¢", "₹", "₩", "₿"),
+        "-" to listOf("–", "—", "_", "·"),
+        "'" to listOf("‘", "’", "‚", "‹", "›"),
+        "\"" to listOf("“", "”", "„", "«", "»"),
+        "%" to listOf("‰", "℅"),
+        "*" to listOf("†", "‡", "★"),
+        "&" to listOf("§"),
+        "+" to listOf("±"),
+        "=" to listOf("≠", "≈", "∞"),
+        "1" to listOf("¹", "½", "⅓", "¼", "⅛"),
+        "2" to listOf("²", "⅔"),
+        "3" to listOf("³", "¾", "⅜"),
+        "4" to listOf("⁴"),
+        "0" to listOf("°", "ⁿ", "∅"),
+    )
+
+    fun alternatesFor(output: String): List<String> = alternates[output.lowercase()].orEmpty()
 }

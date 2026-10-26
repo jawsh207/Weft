@@ -48,14 +48,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -74,13 +78,25 @@ import app.weft.keyboard.layout.KeyAction
 import app.weft.keyboard.layout.KeyRow
 import app.weft.keyboard.layout.KeyboardPage
 import app.weft.keyboard.layout.Layouts
+import kotlin.math.abs
+import kotlin.math.sign
 
 private val RowHeight = 58.dp
 private val KeyGap = 3.dp
 
 /** Space between the bottom row and the system navigation bar / IME switcher. */
-private val BottomClearance = 16.dp
+private val BottomClearance = 18.dp
 private const val KEY_ROWS = 4
+
+/** Horizontal travel on the space bar per one-character cursor step. */
+private val CursorStep = 12.dp
+
+/** What keys can do besides being tapped. */
+private class KeyHandlers(
+    val onKey: (Key) -> Unit,
+    val onCursor: (Int) -> Unit,
+    val popup: AlternatesPopup,
+)
 
 @Composable
 fun KeyboardScreen(
@@ -89,20 +105,35 @@ fun KeyboardScreen(
     onEmoji: (String) -> Unit,
     onMic: () -> Unit,
     onSuggestion: (SuggestionChip) -> Unit,
+    onAlternate: (String) -> Unit,
+    onCursor: (Int) -> Unit,
 ) {
-    Column(
+    val popup = remember { AlternatesPopup() }
+    val currentOnAlternate by rememberUpdatedState(onAlternate)
+    popup.onPick = { currentOnAlternate(it) }
+    val handlers = KeyHandlers(onKey, onCursor, popup)
+
+    // The Box is the coordinate root for the long-press popup.
+    Box(
         Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceContainer)
-            .windowInsetsPadding(WindowInsets.navigationBars)
-            .padding(start = KeyGap, end = KeyGap, top = KeyGap, bottom = BottomClearance),
+            .onGloballyPositioned { popup.rootWidth = it.size.width.toFloat() },
     ) {
-        TopStrip(state, onMic, onSuggestion)
-        if (state.page == KeyboardPage.Emoji) {
-            EmojiPanel(state, onKey, onEmoji)
-        } else {
-            Layouts.rowsFor(state.page).forEach { row -> KeyRowView(row, state, onKey) }
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceContainer)
+                .windowInsetsPadding(WindowInsets.navigationBars)
+                .padding(start = KeyGap, end = KeyGap, top = KeyGap, bottom = BottomClearance),
+        ) {
+            TopStrip(state, onMic, onSuggestion)
+            if (state.page == KeyboardPage.Emoji) {
+                EmojiPanel(state, handlers, onEmoji)
+            } else {
+                Layouts.rowsFor(state.page).forEach { row -> KeyRowView(row, state, handlers) }
+            }
         }
+        AlternatesOverlay(popup)
     }
 }
 
@@ -209,18 +240,18 @@ private fun SuggestionSlot(chip: SuggestionChip, onSuggestion: (SuggestionChip) 
 }
 
 @Composable
-private fun KeyRowView(row: KeyRow, state: KeyboardState, onKey: (Key) -> Unit) {
+private fun KeyRowView(row: KeyRow, state: KeyboardState, handlers: KeyHandlers) {
     Row(
         Modifier
             .fillMaxWidth()
             .height(RowHeight),
     ) {
-        row.forEach { key -> KeySlot(key, state, onKey) }
+        row.forEach { key -> KeySlot(key, state, handlers) }
     }
 }
 
 @Composable
-private fun RowScope.KeySlot(key: Key, state: KeyboardState, onKey: (Key) -> Unit) {
+private fun RowScope.KeySlot(key: Key, state: KeyboardState, handlers: KeyHandlers) {
     val slot = Modifier
         .weight(key.weight)
         .fillMaxHeight()
@@ -228,16 +259,21 @@ private fun RowScope.KeySlot(key: Key, state: KeyboardState, onKey: (Key) -> Uni
     when (key) {
         is Gap -> Spacer(slot)
         is CharKey -> {
-            val label = if (state.shift != ShiftState.Off) key.label.uppercase() else key.label
+            val shifted = state.shift != ShiftState.Off
+            val label = if (shifted) key.label.uppercase() else key.label
+            val alternates = Layouts.alternatesFor(key.output)
+                .map { if (shifted) it.uppercase() else it }
             KeyButton(
                 modifier = slot.semantics { contentDescription = label },
-                style = KeyStyle.Letter,
-                onTap = { onKey(key) },
+                style = if (key.secondary) KeyStyle.Function else KeyStyle.Letter,
+                gesture = if (alternates.isEmpty()) KeyGesture.Tap else KeyGesture.Alternates(alternates),
+                handlers = handlers,
+                onTap = { handlers.onKey(key) },
             ) {
                 Text(label, fontSize = 23.sp, color = it)
             }
         }
-        is ActionKey -> ActionKeyView(key, state, slot, onKey)
+        is ActionKey -> ActionKeyView(key, state, slot, handlers)
     }
 }
 
@@ -246,7 +282,7 @@ private fun ActionKeyView(
     key: ActionKey,
     state: KeyboardState,
     modifier: Modifier,
-    onKey: (Key) -> Unit,
+    handlers: KeyHandlers,
 ) {
     val style = when {
         key.action == KeyAction.Enter -> KeyStyle.Primary
@@ -269,8 +305,13 @@ private fun ActionKeyView(
             modifier
         },
         style = style,
-        repeatable = key.action == KeyAction.Backspace,
-        onTap = { onKey(key) },
+        gesture = when (key.action) {
+            KeyAction.Backspace -> KeyGesture.Repeat
+            KeyAction.Space -> KeyGesture.Cursor
+            else -> KeyGesture.Tap
+        },
+        handlers = handlers,
+        onTap = { handlers.onKey(key) },
     ) { tint ->
         when (key.action) {
             KeyAction.Shift -> KeyIcon(
@@ -284,10 +325,20 @@ private fun ActionKeyView(
             KeyAction.Backspace -> KeyIcon(R.drawable.ic_backspace, tint)
             KeyAction.Enter -> KeyIcon(enterIcon(state.enterAction), tint)
             KeyAction.Emoji -> KeyIcon(R.drawable.ic_emoji, tint)
-            KeyAction.Space -> Unit
+            KeyAction.Space -> if (state.page == KeyboardPage.Numpad) {
+                Text("\u2423", fontSize = 23.sp, color = tint)
+            }
             KeyAction.ToLetters -> KeyText("ABC", tint)
-            KeyAction.ToSymbols -> KeyText("?123", tint)
+            KeyAction.ToSymbols -> KeyText(if (state.page == KeyboardPage.Numpad) "!?#" else "?123", tint)
             KeyAction.ToMoreSymbols -> KeyText("=\\<", tint)
+            KeyAction.ToNumpad -> Text(
+                "1 2\n3 4",
+                fontSize = 12.sp,
+                lineHeight = 13.sp,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center,
+                color = tint,
+            )
         }
     }
 }
@@ -315,7 +366,7 @@ private fun KeyText(text: String, tint: Color) {
 // --- Emoji -------------------------------------------------------------------------------
 
 @Composable
-private fun EmojiPanel(state: KeyboardState, onKey: (Key) -> Unit, onEmoji: (String) -> Unit) {
+private fun EmojiPanel(state: KeyboardState, handlers: KeyHandlers, onEmoji: (String) -> Unit) {
     val emoji = remember { SystemEmoji.starter }
     Box(
         Modifier
@@ -339,6 +390,7 @@ private fun EmojiPanel(state: KeyboardState, onKey: (Key) -> Unit, onEmoji: (Str
                     KeyButton(
                         modifier = Modifier.aspectRatio(1f),
                         style = KeyStyle.Ghost,
+                        handlers = handlers,
                         onTap = { onEmoji(e) },
                     ) {
                         Text(e, fontSize = 26.sp) // system emoji font
@@ -347,7 +399,7 @@ private fun EmojiPanel(state: KeyboardState, onKey: (Key) -> Unit, onEmoji: (Str
             }
         }
     }
-    KeyRowView(Layouts.emojiBottom, state, onKey)
+    KeyRowView(Layouts.emojiBottom, state, handlers)
 }
 
 // --- Key button with Expressive press motion --------------------------------------
@@ -368,22 +420,40 @@ private fun keyColors(style: KeyStyle): KeyColors {
     }
 }
 
+/** How a key responds to touch beyond a simple tap. */
+private sealed interface KeyGesture {
+    /** Commit on release. */
+    data object Tap : KeyGesture
+
+    /** Hold to repeat (backspace). */
+    data object Repeat : KeyGesture
+
+    /** Tap for space; slide sideways to move the cursor. */
+    data object Cursor : KeyGesture
+
+    /** Hold to open a popup of alternates, slide to choose, release to commit. */
+    data class Alternates(val options: List<String>) : KeyGesture
+}
+
 /**
  * A key that commits on release (so a finger can slide off to cancel), gives
  * system haptics on press, and morphs shape on press using the Expressive
- * motion scheme's spatial spring. [repeatable] keys auto-repeat while held.
+ * motion scheme's spatial spring.
  */
 @Composable
 private fun KeyButton(
     modifier: Modifier,
     style: KeyStyle,
-    repeatable: Boolean = false,
+    handlers: KeyHandlers,
+    gesture: KeyGesture = KeyGesture.Tap,
     onTap: () -> Unit,
     content: @Composable (tint: Color) -> Unit,
 ) {
     val view = LocalView.current
     val currentOnTap by rememberUpdatedState(onTap)
+    val currentGesture by rememberUpdatedState(gesture)
     var pressed by remember { mutableStateOf(false) }
+    var bounds by remember { mutableStateOf(Rect.Zero) }
 
     val colors = keyColors(style)
     val motion = MaterialTheme.motionScheme
@@ -410,40 +480,92 @@ private fun KeyButton(
 
     Box(
         modifier
+            .onGloballyPositioned { bounds = it.boundsInRoot() }
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             }
             .clip(RoundedCornerShape(corner))
             .background(container)
-            .pointerInput(repeatable) {
+            .pointerInput(Unit) {
                 awaitEachGesture {
-                    awaitFirstDown(requireUnconsumed = false)
+                    val down = awaitFirstDown(requireUnconsumed = false)
                     pressed = true
                     view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-
+                    val g = currentGesture
                     try {
-                        if (repeatable) {
-                            // Wait for a long-press; if still held, repeat until release.
-                            var outcome = withTimeoutOrNull(REPEAT_DELAY_MS) {
-                                Released(waitForUpOrCancellation() != null)
-                            }
-                            if (outcome == null) {
-                                while (outcome == null) {
+                        when (g) {
+                            KeyGesture.Tap -> if (waitForUpOrCancellation() != null) currentOnTap()
+
+                            KeyGesture.Repeat -> {
+                                // Wait for a long-press; if still held, repeat until release.
+                                var outcome = withTimeoutOrNull(REPEAT_DELAY_MS) {
+                                    Released(waitForUpOrCancellation() != null)
+                                }
+                                if (outcome == null) {
+                                    while (outcome == null) {
+                                        currentOnTap()
+                                        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                        outcome = withTimeoutOrNull(REPEAT_INTERVAL_MS) {
+                                            Released(waitForUpOrCancellation() != null)
+                                        }
+                                    }
+                                } else if (outcome.normally) {
                                     currentOnTap()
-                                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                                    outcome = withTimeoutOrNull(REPEAT_INTERVAL_MS) {
-                                        Released(waitForUpOrCancellation() != null)
+                                }
+                            }
+
+                            KeyGesture.Cursor -> {
+                                val slop = viewConfiguration.touchSlop
+                                val step = CursorStep.toPx()
+                                var sliding = false
+                                var moved = 0
+                                while (true) {
+                                    val change = awaitPointerEvent().changes
+                                        .firstOrNull { it.id == down.id } ?: break
+                                    if (!change.pressed) {
+                                        if (!sliding) currentOnTap()
+                                        break
+                                    }
+                                    val dx = change.position.x - down.position.x
+                                    if (!sliding && abs(dx) > slop) sliding = true
+                                    if (sliding) {
+                                        change.consume()
+                                        val target = ((dx - sign(dx) * slop) / step).toInt()
+                                        if (target != moved) {
+                                            handlers.onCursor(target - moved)
+                                            moved = target
+                                            view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                                        }
                                     }
                                 }
-                            } else if (outcome.normally) {
-                                currentOnTap()
                             }
-                        } else if (waitForUpOrCancellation() != null) {
-                            currentOnTap()
+
+                            is KeyGesture.Alternates -> {
+                                val released = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                                    Released(waitForUpOrCancellation() != null)
+                                }
+                                if (released != null) {
+                                    if (released.normally) currentOnTap()
+                                } else {
+                                    handlers.popup.open(g.options, bounds)
+                                    view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                    while (true) {
+                                        val change = awaitPointerEvent().changes
+                                            .firstOrNull { it.id == down.id } ?: break
+                                        if (!change.pressed) {
+                                            handlers.popup.commit()
+                                            break
+                                        }
+                                        change.consume()
+                                        handlers.popup.track(bounds.left + change.position.x)
+                                    }
+                                }
+                            }
                         }
                     } finally {
                         pressed = false // also runs if the keyboard hides mid-press
+                        if (g is KeyGesture.Alternates) handlers.popup.dismiss()
                     }
                 }
             },
