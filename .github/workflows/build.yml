@@ -47,7 +47,7 @@ jobs:
         env:
           BEFORE: ${{ github.event.before }}
         run: |
-          TAG=""; NEW=false
+          TAG=""; NEW=false; REFRESH=""
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             TAG="$GITHUB_REF_NAME"   # release created on GitHub; the tag already exists
           elif [[ "$GITHUB_EVENT_NAME" == push && "$GITHUB_REF" == refs/heads/main ]]; then
@@ -56,6 +56,11 @@ jobs:
             else
               FILES=$(git diff --name-only --diff-filter=AM "$BEFORE" "$GITHUB_SHA" -- release-notes/)
             fi
+            # Already-released versions whose notes changed: refresh their release pages.
+            REFRESH=$(for f in $FILES; do
+                        v=$(basename "$f" .md)
+                        git rev-parse -q --verify "refs/tags/$v" >/dev/null && echo "$v"
+                      done)
             # Newest version whose notes were added or changed in this push and isn't tagged yet.
             TAG=$(for f in $FILES; do
                     v=$(basename "$f" .md)
@@ -67,6 +72,7 @@ jobs:
           fi
           {
             echo "RELEASE_TAG=$TAG"
+            echo "REFRESH_TAGS=$(echo $REFRESH)"
             echo "RELEASE_NEW=$NEW"
             if [[ -n "$TAG" ]]; then
               echo "WEFT_VERSION_NAME=$TAG"
@@ -181,21 +187,7 @@ jobs:
         if: env.RELEASE_TAG != ''
         run: |
           git fetch --force --tags origin >/dev/null 2>&1 || true
-          TAG="$RELEASE_TAG"
-          PREV=$(git describe --tags --abbrev=0 --match 'v*' "${TAG}^" 2>/dev/null || true)
-          {
-            if [ -f "release-notes/$TAG.md" ]; then
-              cat "release-notes/$TAG.md"
-              echo
-            fi
-            if [ -n "$PREV" ]; then
-              echo "## Changes"
-              echo
-              git log --no-merges --format='- %s' "$PREV..$TAG"
-              echo
-              echo "**Full changelog:** https://github.com/$GITHUB_REPOSITORY/compare/$PREV...$TAG"
-            fi
-          } > release-notes.md
+          .github/scripts/release-notes.sh "$RELEASE_TAG" > release-notes.md
           cat release-notes.md
 
       - name: Publish GitHub Release
@@ -214,3 +206,15 @@ jobs:
           else
             gh release create "$TAG" out/*.apk --title "Weft $TAG" --notes-file release-notes.md --verify-tag
           fi
+
+      # Editing an already-released version's notes file updates that release's page
+      # (summary and changelog) without rebuilding or re-tagging it.
+      - name: Refresh edited release pages
+        if: always() && env.REFRESH_TAGS != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for TAG in $REFRESH_TAGS; do
+            .github/scripts/release-notes.sh "$TAG" > "notes-$TAG.md"
+            gh release edit "$TAG" --notes-file "notes-$TAG.md" && echo "updated $TAG"
+          done

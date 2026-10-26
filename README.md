@@ -57,8 +57,12 @@ builds are signed with the release key too, so they update in place.
 Add `release-notes/vX.Y.Z.md` (a short summary: New / Improved / Fixed) and
 push it to `main`. The Build run for that commit runs the tests, builds the
 signed, R8-optimized APK, tags the commit `vX.Y.Z` and publishes the GitHub
-Release with the notes and every commit since the previous tag. The tag is
+Release. The release page shows the summary, then a changelog of every commit
+since the previous release, then a link to the full comparison. The tag is
 the version name; the version code is the Actions run number.
+
+Editing the notes file of a version that's already released updates its
+release page (summary and changelog) without rebuilding it.
 
 ### Signing
 
