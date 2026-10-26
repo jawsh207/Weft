@@ -23,9 +23,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 17
@@ -38,10 +38,33 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Unit tests
-        run: ./gradlew --no-daemon testDebugUnitTest
+        run: |
+          ./gradlew --no-daemon testDebugUnitTest 2>&1 | tee gradle-test.log
+          exit ${PIPESTATUS[0]}
 
       - name: Build debug APK
-        run: ./gradlew --no-daemon assembleDebug
+        run: |
+          ./gradlew --no-daemon assembleDebug 2>&1 | tee gradle-assemble.log
+          exit ${PIPESTATUS[0]}
+
+      # Surface compiler and Gradle errors as annotations on the run summary.
+      - name: Report build errors
+        if: failure()
+        run: |
+          for f in gradle-test.log gradle-assemble.log; do
+            [ -f "$f" ] || continue
+            grep -E "^e: |error:|What went wrong|Could not |Unresolved|expected:|FAILED|Exception|^> " "$f" \
+              | grep -vE "^> Task [^ ]+( (UP-TO-DATE|NO-SOURCE|FROM-CACHE|SKIPPED))?$" | head -48 > "$f.errors" || true
+            python3 - "$f" <<'PY'
+          import sys
+          name = sys.argv[1]
+          lines = [l.rstrip() for l in open(name + ".errors", encoding="utf-8", errors="replace")]
+          def esc(s):
+              return s.replace("%", "%25").replace("\r", "%0D")
+          for i in range(0, len(lines), 8):
+              print(f"::error title={name} ({i // 8 + 1})::" + "%0A".join(esc(l) for l in lines[i:i + 8]))
+          PY
+          done
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

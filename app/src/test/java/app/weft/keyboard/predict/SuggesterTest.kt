@@ -17,6 +17,7 @@ import java.nio.ByteBuffer
  *   python3 tools/dictgen/build_dict.py --locale en_US \
  *     --aosp tools/dictgen/testdata/aosp.combined.gz --subtitles tools/dictgen/testdata/subs.txt \
  *     --allow tools/dictgen/testdata/allow.txt --leipzig tools/dictgen/testdata/leipzig \
+ *     --casual tools/dictgen/testdata/casual.txt \
  *     --out app/src/test/resources/fixture_en.ekd --date 1 --min-count 1
  */
 class SuggesterTest {
@@ -82,8 +83,33 @@ class SuggesterTest {
     }
 
     @Test
+    fun prefersApostropheMatchOverCloserCommonWord() = assertAutocorrect("im", "I'm")
+
+    @Test
+    fun fixesRareWordsThatAreUsuallyContractions() {
+        assertAutocorrect("cant", "can't")
+        assertAutocorrect("wont", "won't")
+    }
+
+    @Test
+    fun fixesVowelMixUps() {
+        assertAutocorrect("definately", "definitely")
+        assertAutocorrect("seperate", "separate")
+    }
+
+    @Test
+    fun fixesMissingDoubledLetter() = assertAutocorrect("occured", "occurred")
+
+    @Test
+    fun keepsCasualLowercaseWords() {
+        val r = suggester.suggest("ok", null)
+        assertTrue(r.typedIsKnown)
+        assertNull(r.autocorrect)
+    }
+
+    @Test
     fun leavesRealWordsAlone() {
-        for (w in listOf("us", "US", "the", "The", "THE", "cafe", "its")) {
+        for (w in listOf("us", "US", "the", "The", "THE", "cafe", "its", "ill", "well")) {
             val r = suggester.suggest(w, null)
             assertTrue("$w should be known", r.typedIsKnown)
             assertNull("$w should not be corrected", r.autocorrect)

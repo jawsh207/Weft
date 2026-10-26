@@ -27,6 +27,7 @@ python3 tools/dictgen/make_dict.py en_US --max-words 120000 --casual-weight 0.5
 | OpenSubtitles frequencies (Hermit Dave's FrequencyWords) | Tunes rankings toward casual, conversational language | CC BY-SA 4.0 |
 | Leipzig Corpora Collection | Next-word pairs (`-co_n.txt`) | CC BY 4.0 |
 | SCOWL (or a Hunspell `.dic`) | Allow list that filters junk from subtitle-only words | MIT-like |
+| `sources/en_US.casual.txt` | Texting words spell-check lists omit ("lol", "idk", lowercase "ok") | part of this repo |
 
 All are compatible with the app's GPL-3.0 license. The CC BY / CC BY-SA sources
 require attribution: the builder records every source in the dictionary's
@@ -53,7 +54,8 @@ If a download fails, `make_dict.py` prints where else to get the file. Put it in
    (`--casual-weight`, default 0.4). They're matched case-insensitively, so
    "monday" boosts AOSP's "Monday".
 3. Words found only in subtitles are kept only if the allow list contains them,
-   and rank slightly lower.
+   and rank slightly lower. Words in the casual list are always kept, exactly as
+   written.
 4. Next-word strength is the conditional probability of word B following word A,
    on the same log scale, merged from AOSP and Leipzig. The top 12 per word are kept.
 5. The top `--max-words` (default 150,000) are written out.

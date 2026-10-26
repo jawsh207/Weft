@@ -117,8 +117,26 @@ class Suggester(
             typed = typed,
             suggestions = ranked.take(limit),
             typedIsKnown = typedIsKnown,
-            autocorrect = if (typedIsKnown) null else pickAutocorrect(t.size, ranked),
+            autocorrect = if (typedIsKnown) contractionFor(typed, ranked) else pickAutocorrect(t.size, ranked),
         )
+    }
+
+    /**
+     * Real words that are almost always a contraction typed without the
+     * apostrophe ("cant" → "can't", "wont" → "won't"). Only fires when the
+     * contraction is far more common, so "its", "well", "were", "ill" stay put.
+     */
+    private fun contractionFor(typed: String, ranked: List<Suggestion>): Suggestion? {
+        val dict = dictionary ?: return null
+        val typedNode = dict.find(typed).takeIf { it >= 0 } ?: dict.find(typed.lowercase())
+        if (typedNode < 0) return null
+        val candidate = ranked.firstOrNull {
+            it.kind == SuggestionKind.Exact && '\'' in it.word &&
+                it.word.replace("'", "").equals(typed, ignoreCase = true)
+        } ?: return null
+        val candidateNode = dict.findIgnoreCase(candidate.word)
+        if (candidateNode < 0) return null
+        return candidate.takeIf { dict.freq(candidateNode) - dict.freq(typedNode) >= CONTRACTION_MARGIN }
     }
 
     /** Is [word] a real word as typed (allowing sentence-start capitals or all caps)? */
@@ -153,6 +171,9 @@ class Suggester(
     }
 
     private fun pickAutocorrect(length: Int, ranked: List<Suggestion>): Suggestion? {
+        // An unknown word that differs from a real one only by case, accents or an
+        // apostrophe ("im" → "I'm", "monday" → "Monday") is almost certainly that word.
+        ranked.firstOrNull { it.kind == SuggestionKind.Exact }?.let { return it }
         val best = ranked.firstOrNull() ?: return null
         if (best.kind == SuggestionKind.Completion || best.kind == SuggestionKind.Prediction) return null
         val maxCost = when {
@@ -189,7 +210,8 @@ class Suggester(
             for (child in first until first + count) {
                 val raw = dict.char(child)
                 val ch = Character.toLowerCase(raw)
-                val omit = proximity.omission(ch)
+                // Leaving out one of a doubled letter ("occured") is a cheap, common slip.
+                val omit = if (ch == prevCh) DOUBLED_LETTER else proximity.omission(ch)
                 val row = FloatArray(n + 1)
                 row[0] = prev[0] + omit
                 var rowMin = row[0]
@@ -254,9 +276,11 @@ class Suggester(
         var prev = FloatArray(n + 1) { it * EXTRA_LETTER }
         var bestPrefix = prev[n]
         var i = 0
+        var prevCh = -1
         while (i < word.length) {
             val ch = Character.toLowerCase(word.codePointAt(i))
-            val omit = proximity.omission(ch)
+            val omit = if (ch == prevCh) DOUBLED_LETTER else proximity.omission(ch)
+            prevCh = ch
             val row = FloatArray(n + 1)
             row[0] = prev[0] + omit
             for (j in 1..n) {
@@ -294,8 +318,11 @@ class Suggester(
         const val EXACT_BONUS = 2f
         const val COMPLETION_PENALTY = 1.2f
         const val BIGRAM_WEIGHT = 3f
-        const val MIN_AUTOCORRECT_SCORE = 1.5f
+        const val MIN_AUTOCORRECT_SCORE = 0.75f
         const val AUTOCORRECT_MARGIN = 0.6f
+
+        /** How much more frequent (log scale, 13 ≈ 2×) a contraction must be to replace a real word. */
+        const val CONTRACTION_MARGIN = 50
         const val MAX_PREFIX_HITS = 12
         const val COMPLETIONS_PER_PREFIX = 4
         const val MAX_COMPLETION_STEPS = 400

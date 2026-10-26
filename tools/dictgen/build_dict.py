@@ -16,6 +16,9 @@ Inputs (all optional, but at least one frequency source is required):
                      .dic file. Words that come only from --subtitles must appear
                      here (or in AOSP) to be kept, which filters out junk.
                      SCOWL or Wiktionary-derived lists work well.
+  --casual FILE      Words to include exactly as written even if spell-check
+                     lists lack them: texting words ("lol", "idk"), lowercase
+                     "ok". Ranked by subtitle frequency when available.
   --block FILE       Words to drop entirely (repeatable).
 
 Only the Python standard library is used. Output is deterministic for the same
@@ -280,10 +283,14 @@ def merge(args) -> tuple[dict[str, Entry], list[dict], dict]:
         block_lower |= {w.lower() for w in read_word_set(Path(b))}
 
     resolver = Resolver(entries)
+    sub_by_lower: dict[str, int] = {}
 
     if args.subtitles:
         counts = read_counts(Path(args.subtitles))
         max_count = max(counts.values(), default=1)
+        for word, count in counts.items():
+            low = word.lower()
+            sub_by_lower[low] = max(sub_by_lower.get(low, 0), log_scale(count, max_count))
         added = 0
         for word, count in counts.items():
             if count < args.min_count:
@@ -307,6 +314,18 @@ def merge(args) -> tuple[dict[str, Entry], list[dict], dict]:
             "url": "https://github.com/hermitdave/FrequencyWords",
         })
         print(f"  Subtitles: {len(counts):,} words read, {added:,} new", file=sys.stderr)
+
+    if args.casual:
+        added = 0
+        for path in args.casual:
+            for word in sorted(read_word_set(Path(path))):
+                e = entries.get(word)
+                if e is None:
+                    e = resolver.add(word)
+                    added += 1
+                e.not_a_word = False
+                e.sub = max(e.sub or 0, sub_by_lower.get(word.lower(), 110))
+        print(f"  Casual list: {added:,} words added", file=sys.stderr)
 
     if args.leipzig:
         words, pairs = read_leipzig(Path(args.leipzig))
@@ -482,6 +501,7 @@ def main() -> None:
     p.add_argument("--subtitles")
     p.add_argument("--leipzig")
     p.add_argument("--allow", action="append")
+    p.add_argument("--casual", action="append")
     p.add_argument("--block", action="append")
     p.add_argument("--out", required=True, help="Output .ekd path")
     p.add_argument("--max-words", type=int, default=150_000)

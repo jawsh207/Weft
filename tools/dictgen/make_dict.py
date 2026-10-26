@@ -85,6 +85,9 @@ def main() -> None:
         cmd += ["--leipzig", str(paths["leipzig"])]
     if paths.get("allow"):
         cmd += ["--allow", str(paths["allow"])]
+    casual = HERE / "sources" / f"{locale}.casual.txt"
+    if casual.exists():
+        cmd += ["--casual", str(casual)]
     block = HERE / "sources" / f"{locale}.block.txt"
     if block.exists():
         cmd += ["--block", str(block)]
