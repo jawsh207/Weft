@@ -56,12 +56,14 @@ class AlternatesPopup {
 
     fun open(choices: List<String>, key: Rect) {
         if (choices.isEmpty()) return
-        cellWidth = key.width
+        // Cells match the key, but shrink if that many wouldn't fit (wide number-pad keys).
+        cellWidth = if (rootWidth > 0f) minOf(key.width, rootWidth / choices.size) else key.width
         anchor = key
-        selected = 0
         // First option sits over the key, shifted left if it would run off screen.
         val width = cellWidth * choices.size
         left = key.left.coerceAtMost(rootWidth - width).coerceAtLeast(0f)
+        // Start on the option under the finger.
+        selected = ((key.center.x - left) / cellWidth).toInt().coerceIn(0, choices.lastIndex)
         options = choices
     }
 
