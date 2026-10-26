@@ -210,14 +210,7 @@ private fun TopStrip(
                 state.page == KeyboardPage.Emoji -> EmojiSearchPill(state.emojiQuery, emoji.onSearch)
                 state.suggestions.isNotEmpty() -> SuggestionRow(state.suggestions, onSuggestion)
             }
-            val motion = MaterialTheme.motionScheme
-            AnimatedVisibility(
-                visible = showTools && state.toolsOpen,
-                enter = slideInHorizontally(motion.fastSpatialSpec()) { -it } + fadeIn(motion.fastEffectsSpec()),
-                exit = slideOutHorizontally(motion.fastSpatialSpec()) { -it } + fadeOut(motion.fastEffectsSpec()),
-            ) {
-                ToolsRow(state.clipboardHasContent, tools)
-            }
+            ToolsOverlay(showTools && state.toolsOpen, state.clipboardHasContent, tools)
         }
         if (state.voiceAvailable) {
             val description = stringResource(R.string.voice_input)
@@ -254,6 +247,19 @@ private fun ToolsKey(open: Boolean, onToggle: () -> Unit) {
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.graphicsLayer { rotationZ = rotation },
         )
+    }
+}
+
+/** Slides the tools row in from the tools key, over whatever the strip shows. */
+@Composable
+private fun ToolsOverlay(visible: Boolean, hasClip: Boolean, tools: ToolActions) {
+    val motion = MaterialTheme.motionScheme
+    AnimatedVisibility(
+        visible = visible,
+        enter = slideInHorizontally(motion.fastSpatialSpec()) { -it } + fadeIn(motion.fastEffectsSpec()),
+        exit = slideOutHorizontally(motion.fastSpatialSpec()) { -it } + fadeOut(motion.fastEffectsSpec()),
+    ) {
+        ToolsRow(hasClip, tools)
     }
 }
 
