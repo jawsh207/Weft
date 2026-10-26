@@ -113,7 +113,7 @@ class WeftKeyboardService :
     override fun onCreate() {
         super.onCreate()
         savedStateController.performRestore(null)
-        lifecycleRegistry.currentState = Lifecycle.State.CREATED
+        moveLifecycleTo(Lifecycle.State.CREATED)
         voice = SystemVoiceInput(this, voiceListener)
         learned = LearnedWords(File(filesDir, LEARNED_FILE))
         typing = TypingController(learned)
@@ -165,7 +165,7 @@ class WeftKeyboardService :
 
     override fun onStartInputView(info: EditorInfo, restarting: Boolean) {
         super.onStartInputView(info, restarting)
-        lifecycleRegistry.currentState = Lifecycle.State.RESUMED
+        moveLifecycleTo(Lifecycle.State.RESUMED)
 
         state.themeEpoch++ // re-read the palette each time the keyboard shows
         state.message = null
@@ -216,7 +216,7 @@ class WeftKeyboardService :
         suggestJob?.cancel()
         currentInputConnection?.finishComposingText()
         lifecycleScope.launch(Dispatchers.IO) { learned.save() }
-        lifecycleRegistry.currentState = Lifecycle.State.STARTED
+        moveLifecycleTo(Lifecycle.State.STARTED)
         super.onFinishInputView(finishingInput)
     }
 
@@ -241,10 +241,22 @@ class WeftKeyboardService :
 
     override fun onDestroy() {
         voice.stop()
-        learned.save()
-        lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
-        store.clear()
+        // super.onDestroy() finishes the input view, which calls onFinishInputView,
+        // so it has to run while the lifecycle is still alive.
         super.onDestroy()
+        suggestJob?.cancel()
+        learned.save()
+        moveLifecycleTo(Lifecycle.State.DESTROYED)
+        store.clear()
+    }
+
+    /**
+     * Lifecycle changes arrive from several system callbacks, sometimes during
+     * teardown. Once destroyed, the lifecycle can't move again, so ignore them.
+     */
+    private fun moveLifecycleTo(state: Lifecycle.State) {
+        if (lifecycleRegistry.currentState == Lifecycle.State.DESTROYED) return
+        lifecycleRegistry.currentState = state
     }
 
     // --- Suggestions -------------------------------------------------------------------

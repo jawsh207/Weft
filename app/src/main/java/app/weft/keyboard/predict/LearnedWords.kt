@@ -34,7 +34,8 @@ class LearnedWords(private val file: File?) {
         }
     }
 
-    /** Writes atomically; call when the keyboard hides. */
+    /** Writes atomically; call when the keyboard hides. Safe to call from any thread. */
+    @Synchronized
     fun save() {
         val f = file ?: return
         if (!dirty) return
