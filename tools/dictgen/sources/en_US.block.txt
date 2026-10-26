@@ -1,0 +1,4 @@
+# Words never to include in the en_US dictionary, one per line.
+# Offensive words are NOT listed here: they stay in the dictionary flagged as
+# offensive, so they're recognized (no bad autocorrect) but never suggested
+# unless typed in full.

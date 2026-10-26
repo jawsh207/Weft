@@ -1,0 +1,33 @@
+{
+  "locale": "en_US",
+  "description": "English (US)",
+  "sources": {
+    "aosp": {
+      "url": "https://android.googlesource.com/platform/packages/inputmethods/LatinIME/+/refs/heads/main/dictionaries/en_US_wordlist.combined.gz?format=TEXT",
+      "decode": "base64",
+      "file": "en_US_wordlist.combined.gz",
+      "license": "Apache-2.0",
+      "fallback": "HeliBoard's maintained copies: https://codeberg.org/Helium314/aosp-dictionaries (wordlists folder)"
+    },
+    "subtitles": {
+      "url": "https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/en/en_full.txt",
+      "file": "en_full.txt",
+      "license": "CC-BY-SA-4.0"
+    },
+    "leipzig": {
+      "url": "https://downloads.wortschatz-leipzig.de/corpora/eng_news_2023_1M.tar.gz",
+      "file": "eng_news_2023_1M.tar.gz",
+      "license": "CC-BY-4.0",
+      "fallback": "Pick any English corpus at https://wortschatz.uni-leipzig.de/en/download/English and update the url",
+      "optional": true
+    },
+    "allow": {
+      "url": null,
+      "file": "scowl_en_US_70.txt",
+      "license": "MIT-like (SCOWL)",
+      "manual": "Generate at http://app.aspell.net/create (size 70, spelling US, variants 1, no diacritic stripping) and save as tools/dictgen/cache/en_US/scowl_en_US_70.txt. /usr/share/hunspell/en_US.dic is used if this is missing.",
+      "fallbackPaths": ["/usr/share/hunspell/en_US.dic", "/usr/share/myspell/en_US.dic"],
+      "optional": true
+    }
+  }
+}

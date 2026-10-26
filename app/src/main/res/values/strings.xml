@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Weft</string>
+    <string name="ime_name">Weft</string>
+    <string name="subtype_en_us">English (US)</string>
+
+    <string name="key_shift">Shift</string>
+    <string name="key_backspace">Delete</string>
+    <string name="key_enter">Enter</string>
+    <string name="key_space">Space</string>
+    <string name="key_emoji">Emoji</string>
+    <string name="voice_input">Voice input</string>
+    <string name="voice_listening">Listening…</string>
+    <string name="voice_no_match">Didn\'t catch that</string>
+    <string name="voice_error">Voice input error (%1$d)</string>
+    <string name="emoji_none">No emoji available on this device</string>
+
+    <string name="setup_title">Set up keyboard</string>
+    <string name="setup_enable_title">Enable the keyboard</string>
+    <string name="setup_enable_body">Turn on Weft in your system keyboard list.</string>
+    <string name="setup_enable_action">Open settings</string>
+    <string name="setup_select_title">Switch to it</string>
+    <string name="setup_select_body">Make it your current keyboard.</string>
+    <string name="setup_select_action">Choose keyboard</string>
+    <string name="setup_mic_title">Allow voice input</string>
+    <string name="setup_mic_body">Voice typing uses your device\'s own speech engine. Audio goes only to that engine.</string>
+    <string name="setup_mic_no_engine">No speech engine is installed, so the mic key stays hidden. Install one (for example a FOSS engine) and it will be used automatically.</string>
+    <string name="setup_mic_action">Allow microphone</string>
+    <string name="setup_done">Done</string>
+    <string name="setup_try_title">Try it out</string>
+    <string name="setup_try_hint">Type here</string>
+
+    <string name="settings_typing_title">Typing</string>
+    <string name="settings_suggestions">Show suggestions</string>
+    <string name="settings_suggestions_body">Word suggestions and next-word predictions above the keys.</string>
+    <string name="settings_autocorrect">Autocorrect</string>
+    <string name="settings_autocorrect_body">Fix typos when you press space. Press delete right after to undo.</string>
+    <string name="settings_learn">Learn new words</string>
+    <string name="settings_learn_body">Remember words you use that aren\'t in the dictionary. Stored only on this device, never in password or incognito fields.</string>
+    <string name="settings_clear_learned">Clear learned words</string>
+    <string name="settings_learned_count">%1$d learned words</string>
+    <string name="settings_dictionary_title">Dictionary</string>
+    <string name="settings_dictionary_missing">No dictionary is bundled in this build, so suggestions use learned words only. Build one with tools/dictgen/make_dict.py.</string>
+    <string name="settings_dictionary_words">%1$s · %2$,d words</string>
+    <string name="settings_dictionary_sources">Built from these open sources:</string>
+</resources>

@@ -1,0 +1,60 @@
+name: Dictionary
+
+# Downloads the open word-frequency sources, builds the en_US dictionary with
+# tools/dictgen, and commits it to app/src/main/assets/dictionaries/.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - tools/dictgen/**
+      - .github/workflows/dictionary.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dictionary
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Hunspell's en_US word list is the fallback allow list when no SCOWL list is cached.
+      - name: Install Hunspell word list
+        run: sudo apt-get update -q && sudo apt-get install -y -q hunspell-en-us
+
+      - name: Cache downloaded sources
+        uses: actions/cache@v4
+        with:
+          path: tools/dictgen/cache
+          key: dictgen-${{ hashFiles('tools/dictgen/sources/*.json') }}
+
+      - name: Build dictionary
+        run: |
+          # Stamp with the last change to the pipeline so unchanged inputs give identical output.
+          export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct -- tools/dictgen)
+          python3 tools/dictgen/make_dict.py en_US
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/assets/dictionaries/
+          if git diff --cached --quiet; then
+            echo "Dictionary unchanged."
+          else
+            git commit -m "Update en_US dictionary"
+            git push
+          fi
