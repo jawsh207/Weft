@@ -15,10 +15,15 @@ Requires **Android 16 (API 36) or newer**.
 
 ## Status
 
-This is the starter scaffold. Working now:
+Released and working:
 
 - IME service hosting Compose (lifecycle, saved-state and view-model owners wired up)
 - QWERTY, symbols and extra-symbols pages with shift / caps lock and auto-capitalization
+- Phone-style number pad, from the symbols page or on its own in number and phone fields
+- **Long-press alternates:** accented letters, top-row digits, punctuation,
+  currency, and superscripts, subscripts and fractions on the digits. Popups
+  wrap into rows instead of running off screen
+- Slide along the space bar to move the cursor
 - Enter key that adapts to the field (search, send, go, next, done, newline)
 - Grapheme-aware backspace with hold-to-repeat (deletes 👨‍👩‍👧 or 🇨🇦 in one press)
 - Expressive press motion: keys squish and round out on a spring
@@ -29,9 +34,11 @@ This is the starter scaffold. Working now:
   emoji), and search by name, keyword or shortcode ("joy", "lol", ":thumbsup:",
   "us" for 🇺🇸). Emoji the font can't draw are hidden
 - Setup screen: enable keyboard, switch to it, grant the mic, test field
+- Settings to turn suggestions, autocorrect, swipe typing and word learning on or off, and to clear learned words
 - Tools key beside the suggestions: slides out Paste, Clear clipboard and Settings
 - **Suggestions:** typo correction that knows which keys are next to each other,
-  word completions, and next-word predictions, in a three-slot strip
+  word completions, and next-word predictions, in a three-slot strip. Splits
+  run-together words ("letgo" → "let go") and fixes contractions ("im" → "I'm")
 - **Autocorrect** on space or punctuation; delete right after undoes it, and that
   word won't be corrected again in the session
 - **Learned words**, stored only on the device, plus the system personal
@@ -122,7 +129,7 @@ app/src/main/java/app/weft/keyboard/
 1. ~~Prediction~~ — done. Next: long-press a suggestion to forget a learned word,
    learn word pairs from the user's own typing.
 2. ~~Full emoji picker~~ — done, with CLDR keyword search.
-3. **Long-press alternates** — accented letters and key popups.
+3. ~~Long-press alternates~~ — done: accented letters, symbols, superscripts and fractions.
 4. **Settings** — haptics, key height, on-device voice preference, number row.
 5. **Large screens** — floating, one-handed and split layouts for tablets and foldables.
 6. ~~Gesture typing~~ — first version done. Improvements to come back to
