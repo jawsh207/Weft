@@ -12,7 +12,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
@@ -45,6 +45,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -122,6 +125,8 @@ fun KeyboardScreen(
     tools: ToolActions,
     onMic: () -> Unit,
     onSuggestion: (SuggestionChip) -> Unit,
+    /** Confirmed "Remove from suggestions" for a long-pressed word. */
+    onRemoveSuggestion: (String) -> Unit,
     onAlternate: (String) -> Unit,
     onCursor: (Int) -> Unit,
     onSwipe: (FloatArray, FloatArray, Boolean) -> Unit,
@@ -144,7 +149,7 @@ fun KeyboardScreen(
                 .windowInsetsPadding(WindowInsets.navigationBars)
                 .padding(start = KeyGap, end = KeyGap, top = KeyGap, bottom = BottomClearance),
         ) {
-            TopStrip(state, onMic, onSuggestion, emoji, tools)
+            TopStrip(state, onMic, onSuggestion, onRemoveSuggestion, emoji, tools)
             if (state.page == KeyboardPage.Emoji) {
                 if (state.emojiQuery != null) {
                     EmojiSearch(state, handlers, emoji)
@@ -175,6 +180,7 @@ private fun TopStrip(
     state: KeyboardState,
     onMic: () -> Unit,
     onSuggestion: (SuggestionChip) -> Unit,
+    onRemoveSuggestion: (String) -> Unit,
     emoji: EmojiActions,
     tools: ToolActions,
 ) {
@@ -208,7 +214,16 @@ private fun TopStrip(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 state.page == KeyboardPage.Emoji -> EmojiSearchPill(state.emojiQuery, emoji.onSearch)
-                state.suggestions.isNotEmpty() -> SuggestionRow(state.suggestions, onSuggestion)
+                state.pendingRemoval != null -> RemovePrompt(
+                    word = state.pendingRemoval.orEmpty(),
+                    onRemove = { onRemoveSuggestion(it) },
+                    onCancel = { state.pendingRemoval = null },
+                )
+                state.suggestions.isNotEmpty() -> SuggestionRow(
+                    state.suggestions,
+                    onSuggestion,
+                    onLongPress = { state.pendingRemoval = it.text },
+                )
             }
             ToolsOverlay(showTools && state.toolsOpen, state.clipboardHasContent, tools)
         }
@@ -316,9 +331,37 @@ private fun RowScope.ToolButton(
     }
 }
 
+/** Asks before removing a long-pressed suggestion. */
+@Composable
+private fun RemovePrompt(word: String, onRemove: (String) -> Unit, onCancel: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            stringResource(R.string.suggestion_remove_prompt, word),
+            modifier = Modifier.weight(1f),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        TextButton(onClick = onCancel) { Text(stringResource(R.string.suggestion_remove_cancel)) }
+        FilledTonalButton(
+            onClick = { onRemove(word) },
+            contentPadding = PaddingValues(horizontal = 14.dp),
+            modifier = Modifier.height(36.dp),
+        ) { Text(stringResource(R.string.suggestion_remove)) }
+    }
+}
+
 /** Three equal slots; the center one is the best guess. */
 @Composable
-private fun SuggestionRow(chips: List<SuggestionChip?>, onSuggestion: (SuggestionChip) -> Unit) {
+private fun SuggestionRow(
+    chips: List<SuggestionChip?>,
+    onSuggestion: (SuggestionChip) -> Unit,
+    onLongPress: (SuggestionChip) -> Unit,
+) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         for (i in 0 until 3) {
             if (i > 0) {
@@ -331,15 +374,20 @@ private fun SuggestionRow(chips: List<SuggestionChip?>, onSuggestion: (Suggestio
             }
             val chip = chips.getOrNull(i)
             Box(Modifier.weight(1f).height(40.dp), contentAlignment = Alignment.Center) {
-                if (chip != null) SuggestionSlot(chip, onSuggestion)
+                if (chip != null) SuggestionSlot(chip, onSuggestion, onLongPress)
             }
         }
     }
 }
 
 @Composable
-private fun SuggestionSlot(chip: SuggestionChip, onSuggestion: (SuggestionChip) -> Unit) {
+private fun SuggestionSlot(
+    chip: SuggestionChip,
+    onSuggestion: (SuggestionChip) -> Unit,
+    onLongPress: (SuggestionChip) -> Unit,
+) {
     val cs = MaterialTheme.colorScheme
+    val haptics = LocalHapticFeedback.current
     val emphasized = chip.style == ChipStyle.Autocorrect
     Box(
         Modifier
@@ -347,7 +395,13 @@ private fun SuggestionSlot(chip: SuggestionChip, onSuggestion: (SuggestionChip) 
             .padding(horizontal = 2.dp)
             .clip(RoundedCornerShape(20.dp))
             .background(if (emphasized) cs.secondaryContainer else Color.Transparent)
-            .clickable { onSuggestion(chip) }
+            .combinedClickable(
+                onClick = { onSuggestion(chip) },
+                onLongClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onLongPress(chip)
+                },
+            )
             .padding(horizontal = 8.dp),
         contentAlignment = Alignment.Center,
     ) {

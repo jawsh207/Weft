@@ -23,6 +23,9 @@ class KeyboardState {
     /** Three slots (left, center, right); null slots are empty. Empty list = no strip. */
     var suggestions by mutableStateOf<List<SuggestionChip?>>(emptyList())
 
+    /** A suggestion the user long-pressed, waiting for "Remove" to be confirmed. */
+    var pendingRemoval by mutableStateOf<String?>(null)
+
     // --- Emoji picker ---
     var emojiCatalog by mutableStateOf<EmojiCatalog?>(null)
     var emojiRecents by mutableStateOf<List<String>>(emptyList())

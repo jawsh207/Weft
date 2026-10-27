@@ -60,18 +60,22 @@ class SwipeDecoder(
         val prevNode = if (dict != null && previous != null) dict.findIgnoreCase(previous) else -1
         if (dict != null) {
             CandidateSearch(dict, dense).run { node, word ->
+                if (learned.isRemoved(word)) return@run
                 val geometry = geometry(word, shape) ?: return@run
                 var score = dict.freq(node) / 25.5f - tuning.geometry * geometry
                 if (prevNode >= 0) score += dict.bigramStrength(prevNode, node) / 255f * BIGRAM_WEIGHT
                 // "world's" traces almost the same path as "world"; prefer the plain word.
                 if (word.endsWith("'s")) score -= POSSESSIVE_PENALTY
+                // The user's habits break ties between look-alike paths (for/four, to/too).
+                score += learned.boost(word) + learned.pairBoost(previous, word)
                 keepBest(found, Candidate(word, score, geometry))
             }
         }
         for ((word, freq) in learned.candidates()) {
             if (!passesThrough(word, dense)) continue
             val geometry = geometry(word, shape) ?: continue
-            keepBest(found, Candidate(word, freq / 25.5f - tuning.geometry * geometry, geometry))
+            val score = freq / 25.5f - tuning.geometry * geometry + learned.boost(word) + learned.pairBoost(previous, word)
+            keepBest(found, Candidate(word, score, geometry))
         }
         return found.values.sortedByDescending { it.score }.take(limit)
     }

@@ -103,6 +103,11 @@ class WeftKeyboardService :
     private lateinit var clipboard: ClipboardManager
     private val clipListener = ClipboardManager.OnPrimaryClipChangedListener { updateClipboardState() }
 
+    /** "Clear" in settings takes effect at once, even if the keyboard is showing. */
+    private val prefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
+        if (key == Prefs.LEARNED_RESET) applyLearnedReset(prefs.learnedReset())
+    }
+
     /** The current text field, for [TypingController]. */
     private val editor = object : TextEditor {
         override fun textBeforeCursor(length: Int): CharSequence? =
@@ -132,10 +137,14 @@ class WeftKeyboardService :
         savedStateController.performRestore(null)
         moveLifecycleTo(Lifecycle.State.CREATED)
         voice = SystemVoiceInput(this, voiceListener)
-        learned = LearnedWords(File(filesDir, LEARNED_FILE))
+        learned = LearnedWords(
+            File(filesDir, LearnedWords.WORDS_FILE),
+            File(filesDir, LearnedWords.HISTORY_FILE),
+        )
         typing = TypingController(learned)
         clipboard = getSystemService(ClipboardManager::class.java)
         clipboard.addPrimaryClipChangedListener(clipListener)
+        Prefs.of(this).registerOnSharedPreferenceChangeListener(prefsListener)
         loadPrediction()
         loadEmoji()
     }
@@ -249,6 +258,7 @@ class WeftKeyboardService :
                         ),
                         onMic = ::onMic,
                         onSuggestion = ::onSuggestion,
+                        onRemoveSuggestion = ::onRemoveSuggestion,
                         onAlternate = ::onAlternate,
                         onCursor = ::moveCursor,
                         onSwipe = ::onSwipe,
@@ -266,6 +276,7 @@ class WeftKeyboardService :
         state.message = null
         state.emojiQuery = null
         state.toolsOpen = false
+        state.pendingRemoval = null
         updateClipboardState()
         state.voiceAvailable = voice.isAvailable
         state.enterAction = resolveEnterAction(info)
@@ -283,6 +294,7 @@ class WeftKeyboardService :
 
     /** Applies user settings and what the field allows (passwords, incognito, URLs…). */
     private fun configurePrediction(info: EditorInfo) {
+        typing.onInputStarted() // finish up the last field under its own settings
         val prefs = Prefs.of(this)
         val type = info.inputType
         val isText = (type and InputType.TYPE_MASK_CLASS) == InputType.TYPE_CLASS_TEXT
@@ -307,12 +319,14 @@ class WeftKeyboardService :
         swipeAllowed = policy.swipe
         state.swipeEnabled = swipeAllowed && swipeDecoder != null
 
-        val reset = prefs.learnedReset()
-        if (reset != learnedResetSeen) {
-            learnedResetSeen = reset
-            learned.clear()
-        }
-        typing.onInputStarted()
+        applyLearnedReset(prefs.learnedReset())
+    }
+
+    private fun applyLearnedReset(reset: Int) {
+        if (reset == learnedResetSeen) return
+        learnedResetSeen = reset
+        learned.clear()
+        lifecycleScope.launch(Dispatchers.IO) { learned.save() }
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
@@ -346,6 +360,7 @@ class WeftKeyboardService :
     override fun onDestroy() {
         voice.stop()
         clipboard.removePrimaryClipChangedListener(clipListener)
+        Prefs.of(this).unregisterOnSharedPreferenceChangeListener(prefsListener)
         // super.onDestroy() finishes the input view, which calls onFinishInputView,
         // so it has to run while the lifecycle is still alive.
         super.onDestroy()
@@ -387,6 +402,7 @@ class WeftKeyboardService :
     private fun onSwipe(xs: FloatArray, ys: FloatArray, done: Boolean) {
         val decoder = swipeDecoder ?: return
         state.toolsOpen = false
+        state.pendingRemoval = null
         val ctx = typing.context(editor)
         // Context for ranking: the word just before where this one will go.
         val previous = ctx.fragment.ifEmpty { null } ?: ctx.previous
@@ -413,6 +429,14 @@ class WeftKeyboardService :
         }
     }
 
+    /** Long-press › Remove on a suggestion. */
+    private fun onRemoveSuggestion(word: String) {
+        state.pendingRemoval = null
+        typing.onRemove(word)
+        lifecycleScope.launch(Dispatchers.IO) { learned.save() }
+        refreshSuggestions()
+    }
+
     /** Shift capitalizes a swiped word; caps lock uppercases it. */
     private fun applyShift(word: String): String = when (state.shift) {
         ShiftState.Off -> word
@@ -422,6 +446,7 @@ class WeftKeyboardService :
 
     private fun onSuggestion(chip: SuggestionChip) {
         state.message = null
+        state.pendingRemoval = null
         typing.onPick(editor, chip)
         if (state.shift == ShiftState.Once) state.shift = ShiftState.Off
     }
@@ -431,6 +456,7 @@ class WeftKeyboardService :
     private fun onKey(key: Key) {
         state.message = null
         state.toolsOpen = false
+        state.pendingRemoval = null
         if (state.emojiQuery != null && state.page == KeyboardPage.Emoji) {
             onEmojiSearchKey(key)
             return
@@ -635,7 +661,6 @@ class WeftKeyboardService :
     private companion object {
         const val DOUBLE_TAP_MS = 300L
         const val GRAPHEME_LOOKBACK = 64
-        const val LEARNED_FILE = "learned_words.tsv"
         const val EMOJI_ASSET = "emoji/emoji.txt"
         const val EMOJI_RECENTS = "emoji_recents"
         const val EMOJI_TONES = "emoji_tones"

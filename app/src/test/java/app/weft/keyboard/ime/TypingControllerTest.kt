@@ -215,4 +215,81 @@ class TypingControllerTest {
         controller.onSeparator(editor, "")
         assertEquals("the", editor.toString())
     }
+
+    // --- Learning from the user's typing -----------------------------------------------------
+
+    @Test
+    fun finishedWordsAreLearnedAsPairs() {
+        type("I")
+        controller.onSeparator(editor, " ")
+        type("know")
+        controller.onSeparator(editor, " ")
+        assertTrue(learned.pairBoost("I", "know") > 0f)
+        assertTrue(learned.boost("know") > 0f)
+    }
+
+    @Test
+    fun undoingACorrectionIsRememberedForGood() {
+        type("teh")
+        controller.onSeparator(editor, " ")
+        assertTrue(controller.onBackspace(editor))
+        assertTrue(learned.isKeptAsTyped("teh"))
+        assertEquals(0f, learned.boost("the"), 0f) // the correction was taken back
+        assertTrue(learned.boost("teh") > 0f)
+
+        // A new session (keyboard restarted) still leaves it alone.
+        val fresh = TypingController(learned).apply { suggester = controller.suggester }
+        val e = FakeEditor()
+        "teh".forEach { fresh.onText(e, it.toString()) }
+        fresh.onSeparator(e, " ")
+        assertEquals("teh ", e.toString())
+    }
+
+    @Test
+    fun swipedWordIsLearnedOnceTheUserMovesOn() {
+        controller.onSwipe(editor, listOf("for", "four"))
+        assertEquals(0f, learned.boost("for"), 0f) // might still be swapped or deleted
+        controller.onPick(editor, SuggestionChip("four"))
+        controller.onSwipe(editor, listOf("you"))
+        assertTrue(learned.boost("four") > 0f)
+        assertEquals(0f, learned.boost("for"), 0f)
+        controller.onSeparator(editor, " ")
+        assertTrue(learned.pairBoost("four", "you") > 0f)
+    }
+
+    @Test
+    fun deletedSwipeIsNotLearned() {
+        controller.onSwipe(editor, listOf("hello"))
+        controller.onBackspace(editor)
+        controller.onSwipe(editor, listOf("help"))
+        assertEquals(0f, learned.boost("hello"), 0f)
+    }
+
+    @Test
+    fun picksAreLearnedAfterThePreviousWord() {
+        type("I")
+        controller.onSeparator(editor, " ")
+        controller.onPick(editor, SuggestionChip("think"))
+        assertTrue(learned.pairBoost("I", "think") > 0f)
+    }
+
+    @Test
+    fun nothingIsLearnedWhenLearningIsOff() {
+        controller.learningEnabled = false
+        type("I")
+        controller.onSeparator(editor, " ")
+        type("teh")
+        controller.onSeparator(editor, " ")
+        controller.onBackspace(editor)
+        assertEquals(0f, learned.boost("I"), 0f)
+        assertFalse(learned.isKeptAsTyped("teh"))
+    }
+
+    @Test
+    fun removingASuggestionStopsIt() {
+        type("teh")
+        controller.onRemove("the")
+        controller.onSeparator(editor, " ")
+        assertFalse(editor.toString() == "the ")
+    }
 }

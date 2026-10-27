@@ -65,6 +65,7 @@ import app.weft.keyboard.ime.DictionaryLoader
 import org.json.JSONObject
 import java.io.File
 import app.weft.keyboard.R
+import app.weft.keyboard.predict.LearnedWords
 import app.weft.keyboard.ime.WeftKeyboardService
 import app.weft.keyboard.theme.SystemTheme
 
@@ -289,8 +290,10 @@ private fun TypingSettings() {
     var autocorrect by remember { mutableStateOf(prefs.getBoolean(Prefs.AUTOCORRECT, true)) }
     var learn by remember { mutableStateOf(prefs.getBoolean(Prefs.LEARN_WORDS, true)) }
     var swipe by remember { mutableStateOf(prefs.getBoolean(Prefs.SWIPE, true)) }
-    val learnedFile = remember { File(context.filesDir, "learned_words.tsv") }
+    val learnedFile = remember { File(context.filesDir, LearnedWords.WORDS_FILE) }
+    val historyFile = remember { File(context.filesDir, LearnedWords.HISTORY_FILE) }
     var learnedCount by remember { mutableIntStateOf(countLines(learnedFile)) }
+    var pairCount by remember { mutableIntStateOf(countLines(historyFile, prefix = "p\t")) }
 
     SectionCard(stringResource(R.string.settings_typing_title)) {
         SwitchRow(stringResource(R.string.settings_suggestions), stringResource(R.string.settings_suggestions_body), suggestions) {
@@ -314,7 +317,7 @@ private fun TypingSettings() {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                stringResource(R.string.settings_learned_count, learnedCount),
+                stringResource(R.string.settings_learned_count, learnedCount, pairCount),
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -322,10 +325,12 @@ private fun TypingSettings() {
             OutlinedButton(
                 onClick = {
                     learnedFile.delete()
+                    historyFile.delete()
                     prefs.edit { putInt(Prefs.LEARNED_RESET, prefs.getInt(Prefs.LEARNED_RESET, 0) + 1) }
                     learnedCount = 0
+                    pairCount = 0
                 },
-                enabled = learnedCount > 0,
+                enabled = learnedCount > 0 || historyFile.exists(),
             ) { Text(stringResource(R.string.settings_clear_learned)) }
         }
     }
@@ -409,8 +414,8 @@ private fun DictionaryInfo() {
     }
 }
 
-private fun countLines(file: File): Int =
-    if (file.exists()) file.useLines { lines -> lines.count { it.isNotBlank() } } else 0
+private fun countLines(file: File, prefix: String = ""): Int =
+    if (file.exists()) file.useLines { lines -> lines.count { it.isNotBlank() && it.startsWith(prefix) } } else 0
 
 private fun Context.hasMic(): Boolean =
     checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED

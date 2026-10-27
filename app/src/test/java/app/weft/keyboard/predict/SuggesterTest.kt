@@ -240,4 +240,41 @@ class SuggesterTest {
         val r = suggester.suggest(typed, null)
         assertEquals("autocorrect for '$typed' (got ${r.suggestions})", expected, r.autocorrect?.word)
     }
+
+    // --- Learning from the user's typing -----------------------------------------------------
+
+    @Test
+    fun personalWordPairsLeadPredictions() {
+        assertEquals("am", suggester.suggest("", "I").suggestions.first().word)
+        repeat(3) { learned.recordWord("know", "I") }
+        assertEquals("know", suggester.suggest("", "I").suggestions.first().word)
+    }
+
+    @Test
+    fun predictsAfterWordsTheDictionaryDoesntKnow() {
+        assertTrue(suggester.suggest("", "Weft").suggestions.isEmpty())
+        repeat(2) { learned.recordWord("keyboard", "weft") }
+        assertEquals(listOf("keyboard"), suggester.suggest("", "Weft").suggestions.map { it.word })
+    }
+
+    @Test
+    fun removedWordsAreNeverSuggested() {
+        assertEquals("the", suggester.suggest("teh", null).autocorrect?.word)
+        learned.remove("the")
+        val result = suggester.suggest("teh", null)
+        assertFalse(result.suggestions.any { it.word.equals("the", ignoreCase = true) })
+        assertFalse(result.autocorrect?.word.equals("the", ignoreCase = true))
+        repeat(3) { learned.recordWord("you", "love") }
+        learned.remove("you")
+        assertFalse(suggester.suggest("", "love").suggestions.any { it.word == "you" })
+    }
+
+    @Test
+    fun ownPairsBreakTies() {
+        // "ther" could be there, their, then…; the user's habit after "over" decides.
+        val before = suggester.suggest("ther", "over").suggestions.map { it.word }
+        val target = before.last()
+        repeat(6) { learned.recordWord(target, "over") }
+        assertEquals(target, suggester.suggest("ther", "over").suggestions.first().word)
+    }
 }

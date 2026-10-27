@@ -18,6 +18,9 @@
     <string name="tools_settings">Settings</string>
     <string name="tools_settings_description">Keyboard settings</string>
     <string name="clipboard_cleared">Clipboard cleared</string>
+    <string name="suggestion_remove_prompt">Remove “%1$s” from suggestions?</string>
+    <string name="suggestion_remove">Remove</string>
+    <string name="suggestion_remove_cancel">Cancel</string>
     <string name="voice_listening">Listening…</string>
     <string name="voice_no_match">Didn\'t catch that</string>
     <string name="voice_error">Voice input error (%1$d)</string>
@@ -49,10 +52,10 @@
     <string name="settings_autocorrect_body">Fix typos when you press space. Press delete right after to undo.</string>
     <string name="settings_swipe">Swipe typing</string>
     <string name="settings_swipe_body">Slide across the letters to type a word, lifting between words. Spaces are added for you; delete removes the whole word.</string>
-    <string name="settings_learn">Learn new words</string>
-    <string name="settings_learn_body">Remember words you use that aren\'t in the dictionary. Stored only on this device, never in password or incognito fields.</string>
-    <string name="settings_clear_learned">Clear learned words</string>
-    <string name="settings_learned_count">%1$d learned words</string>
+    <string name="settings_learn">Learn from my typing</string>
+    <string name="settings_learn_body">Remember new words, the words you use most and which words you type together, so suggestions and swipe fit how you write. Undoing a correction keeps that word as you typed it. Stored only on this device, never in password, incognito, email or web address fields.</string>
+    <string name="settings_clear_learned">Clear</string>
+    <string name="settings_learned_count">%1$d new words and %2$d word pairs learned. Long-press a suggestion to remove it.</string>
     <string name="settings_dictionary_title">Dictionary</string>
     <string name="settings_dictionary_missing">No dictionary is bundled in this build, so suggestions use learned words only. Build one with tools/dictgen/make_dict.py.</string>
     <string name="settings_dictionary_words">%1$s · %2$,d words</string>

@@ -45,6 +45,7 @@ class FieldPolicyTest {
         assertTrue(p.suggestions)
         assertFalse(p.autocorrect)
         assertFalse(p.swipe)
+        assertFalse(p.learning)
     }
 
     @Test

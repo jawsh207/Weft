@@ -56,15 +56,8 @@ class Suggester(
         val prevNode = if (dict != null && previous != null) dict.findIgnoreCase(previous) else -1
 
         if (typed.isEmpty()) {
-            if (dict == null || prevNode < 0) return SuggestionResult.EMPTY
-            val predictions = dict.bigrams(prevNode)
-                .filter { !dict.isOffensive(it.first) }
-                .sortedByDescending { it.second }
-                .take(limit)
-                .map { (node, strength) ->
-                    Suggestion(dict.word(node), SuggestionKind.Prediction, strength / 25.5f, 0f)
-                }
-            return SuggestionResult("", predictions, true, null)
+            if (previous == null) return SuggestionResult.EMPTY
+            return SuggestionResult("", predict(dict, prevNode, previous, limit), true, null)
         }
 
         val t = typed.lowercase().codePoints().toArray()
@@ -72,6 +65,7 @@ class Suggester(
         val found = HashMap<String, Suggestion>()
 
         fun offer(s: Suggestion) {
+            if (learned.isRemoved(s.word)) return
             val existing = found[s.word]
             if (existing == null || s.score > existing.score) found[s.word] = s
         }
@@ -83,13 +77,13 @@ class Suggester(
                 if (dict.isOffensive(node) && cost > 0f) continue
                 val word = dict.word(node)
                 val kind = if (cost <= EXACT_COST) SuggestionKind.Exact else SuggestionKind.Correction
-                offer(Suggestion(word, kind, score(dict.freq(node), cost, kind, dict, prevNode, node), cost))
+                offer(Suggestion(word, kind, score(word, dict.freq(node), cost, kind, dict, prevNode, node, previous), cost))
             }
             for ((node, cost) in completions(dict, search.prefixHits)) {
                 if (dict.isOffensive(node)) continue
                 val word = dict.word(node)
                 val extra = (word.codePointCount(0, word.length) - t.size).coerceAtLeast(1)
-                val s = score(dict.freq(node), cost, SuggestionKind.Completion, dict, prevNode, node) -
+                val s = score(word, dict.freq(node), cost, SuggestionKind.Completion, dict, prevNode, node, previous) -
                     0.12f * extra
                 offer(Suggestion(word, SuggestionKind.Completion, s, cost))
             }
@@ -99,10 +93,10 @@ class Suggester(
             val (full, prefix) = distance(t, word)
             if (full <= budget) {
                 val kind = if (full <= EXACT_COST) SuggestionKind.Exact else SuggestionKind.Correction
-                offer(Suggestion(word, kind, score(freq, full, kind, null, -1, -1), full))
+                offer(Suggestion(word, kind, score(word, freq, full, kind, null, -1, -1, previous), full))
             } else if (prefix <= budget && t.size >= 2) {
                 offer(Suggestion(word, SuggestionKind.Completion,
-                    score(freq, prefix, SuggestionKind.Completion, null, -1, -1), prefix))
+                    score(word, freq, prefix, SuggestionKind.Completion, null, -1, -1, previous), prefix))
             }
         }
 
@@ -153,15 +147,50 @@ class Suggester(
         return learned.isKnown(word)
     }
 
+    // --- Next-word predictions ---------------------------------------------------------------
+
+    /**
+     * What usually comes after [previous]: the user's own word pairs first
+     * (they're the strongest signal), then the dictionary's, each nudged by
+     * how often the user types that word.
+     */
+    private fun predict(dict: BinaryDictionary?, prevNode: Int, previous: String, limit: Int): List<Suggestion> {
+        val found = HashMap<String, Suggestion>()
+        fun offer(word: String, score: Float) {
+            if (learned.isRemoved(word)) return
+            val key = word.lowercase()
+            val old = found[key]
+            if (old == null || score > old.score) found[key] = Suggestion(word, SuggestionKind.Prediction, score, 0f)
+        }
+        if (dict != null && prevNode >= 0) {
+            for ((node, strength) in dict.bigrams(prevNode)) {
+                if (dict.isOffensive(node)) continue
+                val word = dict.word(node)
+                offer(word, strength / 25.5f + learned.boost(word) + learned.pairBoost(previous, word))
+            }
+        }
+        for ((word, uses) in learned.nextWords(previous)) {
+            // Prefer the dictionary's spelling ("i" → "I", "monday" → "Monday").
+            val display = dict?.findIgnoreCase(word)?.takeIf { it >= 0 }?.let { dict.word(it) }
+                ?: learned.candidates().firstOrNull { it.first.equals(word, ignoreCase = true) }?.first
+                ?: word
+            if (dict != null && dict.findIgnoreCase(word).let { it >= 0 && dict.isOffensive(it) }) continue
+            offer(display, PERSONAL_PREDICTION_BASE + learned.pairBoost(previous, word) + learned.boost(word) + uses * 0.01f)
+        }
+        return found.values.sortedWith(compareByDescending<Suggestion> { it.score }.thenBy { it.word }).take(limit)
+    }
+
     // --- Scoring -----------------------------------------------------------------------------
 
     private fun score(
+        word: String,
         freq: Int,
         cost: Float,
         kind: SuggestionKind,
         dict: BinaryDictionary?,
         prevNode: Int,
         node: Int,
+        previous: String?,
     ): Float {
         var s = freq / 25.5f - cost * COST_WEIGHT
         if (kind == SuggestionKind.Exact) s += EXACT_BONUS
@@ -169,6 +198,8 @@ class Suggester(
         if (dict != null && prevNode >= 0 && node >= 0) {
             s += dict.bigramStrength(prevNode, node) / 255f * BIGRAM_WEIGHT
         }
+        // The user's own habits: words they use often, and what they type after [previous].
+        s += learned.boost(word) + learned.pairBoost(previous, word)
         return s
     }
 
@@ -366,6 +397,9 @@ class Suggester(
         const val EXACT_BONUS = 2f
         const val COMPLETION_PENALTY = 1.2f
         const val BIGRAM_WEIGHT = 3f
+
+        /** Score of a word pair the user has typed twice, before its boosts; strong dictionary pairs reach ~8.6. */
+        const val PERSONAL_PREDICTION_BASE = 7f
         const val MIN_AUTOCORRECT_SCORE = 0.75f
 
         /** Completions need more confidence than corrections before space inserts them. */

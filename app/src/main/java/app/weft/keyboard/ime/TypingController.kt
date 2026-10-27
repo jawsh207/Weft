@@ -31,7 +31,8 @@ data class SuggestionChip(val text: String, val style: ChipStyle = ChipStyle.Nor
 /**
  * Word-level typing behavior, independent of Android so it can be unit tested:
  * autocorrect when a word ends, backspace to undo an autocorrect, smart spacing
- * around punctuation after a picked suggestion, and learning new words.
+ * around punctuation after a picked suggestion, and learning from what the user
+ * types (new words, how often they use words, which word follows which).
  */
 class TypingController(private val learned: LearnedWords) {
 
@@ -45,28 +46,39 @@ class TypingController(private val learned: LearnedWords) {
     /** False in fields that ask for no personalized learning (e.g. incognito). */
     var learningEnabled = true
 
-    private data class Correction(val original: String, val corrected: String, val separator: String)
+    private data class Correction(
+        val original: String,
+        val corrected: String,
+        val separator: String,
+        val previous: String?,
+    )
 
     private var lastCorrection: Correction? = null
     private var autoSpaced = false
 
-    /** The last swiped word and the decoder's other guesses for that swipe. */
-    private data class Swiped(val word: String, val alternatives: List<String>)
+    /**
+     * The last swiped word, the decoder's other guesses for that swipe, and the
+     * word before it. It's learned once the user moves on, since they may still
+     * swap it for a guess or delete it.
+     */
+    private data class Swiped(val word: String, val alternatives: List<String>, val previous: String?)
 
     private var swiped: Swiped? = null
 
     /** After a swipe, the next tapped letter starts a new word with a space. */
     private var phantomSpace = false
+    /** Undone corrections this session (also remembered for good when learning is allowed). */
     private val rejected = HashSet<String>()
 
     @Volatile
     private var lastResult: SuggestionResult? = null
 
+    /** A new field, or the cursor moved: the word being typed is no longer the one at the cursor. */
     fun onInputStarted() {
         lastCorrection = null
         autoSpaced = false
         lastResult = null
-        swiped = null
+        finishSwipe()
         phantomSpace = false
     }
 
@@ -108,7 +120,7 @@ class TypingController(private val learned: LearnedWords) {
         }
         if (result.typed.isEmpty()) return centered(words.map { SuggestionChip(it) })
 
-        val auto = result.autocorrect?.takeIf { autocorrectEnabled && result.typed !in rejected }
+        val auto = result.autocorrect?.takeIf { autocorrectEnabled && !isKeptAsTyped(result.typed) }
         if (auto != null) {
             val alt = words.firstOrNull { it != auto.word }?.let { SuggestionChip(it) }
             return listOf(
@@ -136,7 +148,7 @@ class TypingController(private val learned: LearnedWords) {
     fun onText(editor: TextEditor, text: String) {
         lastCorrection = null
         autoSpaced = false
-        swiped = null
+        finishSwipe()
         if (phantomSpace) {
             phantomSpace = false
             editor.insert(" $text")
@@ -155,10 +167,14 @@ class TypingController(private val learned: LearnedWords) {
         val word = candidates.firstOrNull() ?: return
         lastCorrection = null
         autoSpaced = false
+        finishSwipe()
+        val ctx = context(editor)
         val before = editor.textBeforeCursor(1)?.toString().orEmpty()
         val needsSpace = before.isNotEmpty() && !before.last().isWhitespace() && before.last() !in OPENERS
         editor.insert(if (needsSpace) " $word" else word)
-        swiped = Swiped(word, candidates)
+        // The word this one follows: the one right before the cursor, or the one before a space.
+        val previous = if (needsSpace) ctx.fragment.ifEmpty { null } else ctx.previous
+        swiped = Swiped(word, candidates, previous)
         phantomSpace = true
     }
 
@@ -193,9 +209,11 @@ class TypingController(private val learned: LearnedWords) {
                 editor.deleteBefore(ctx.fragment.length)
                 editor.insert(fix + separator)
             }
-            lastCorrection = Correction(ctx.fragment, fix, separator)
+            lastCorrection = Correction(ctx.fragment, fix, separator, ctx.previous)
+            remember(fix, ctx.previous)
         } else {
             learn(ctx.fragment)
+            remember(ctx.fragment, ctx.previous)
             if (separator.isNotEmpty()) editor.insert(separator)
         }
     }
@@ -223,8 +241,12 @@ class TypingController(private val learned: LearnedWords) {
             editor.deleteBefore(tail.length)
             editor.insert(c.original + c.separator)
         }
-        rejected += c.original // don't fight the user on this word again
+        keepAsTyped(c.original) // don't fight the user on this word again
         learn(c.original)
+        if (learningEnabled) {
+            forgetPhrase(c.corrected, c.previous)
+            remember(c.original, c.previous)
+        }
         return true
     }
 
@@ -243,7 +265,7 @@ class TypingController(private val learned: LearnedWords) {
             phantomSpace = true
             return
         }
-        swiped = null
+        finishSwipe()
         phantomSpace = false
         editor.batch {
             if (ctx.fragment.isNotEmpty()) editor.deleteBefore(ctx.fragment.length)
@@ -251,19 +273,66 @@ class TypingController(private val learned: LearnedWords) {
         }
         autoSpaced = true
         if (chip.style == ChipStyle.Verbatim) {
-            rejected += chip.text
-            if (learningEnabled) learned.recordUse(chip.text, explicit = true)
+            keepAsTyped(chip.text)
+            if (learningEnabled) {
+                learned.restore(chip.text)
+                learned.recordUse(chip.text, explicit = true)
+            }
         }
+        // It replaces the word being typed (if any), so it follows the word before that.
+        remember(chip.text, ctx.previous)
+    }
+
+    /**
+     * Removes [word] from suggestions (long-press on the strip): forgets it if
+     * it was learned, and stops suggesting it if it's a dictionary word.
+     */
+    fun onRemove(word: String) {
+        learned.remove(word)
+        lastResult = null
     }
 
     // --- Helpers ---------------------------------------------------------------------------
 
     private fun autocorrectFor(ctx: WordContext): String? {
         if (!autocorrectEnabled || !suggestionsEnabled) return null
-        if (ctx.fragment.isEmpty() || ctx.fragment in rejected) return null
+        if (ctx.fragment.isEmpty() || isKeptAsTyped(ctx.fragment)) return null
         val s = suggester ?: return null
         val result = lastResult?.takeIf { it.typed == ctx.fragment } ?: s.suggest(ctx.fragment, ctx.previous)
         return result.autocorrect?.word
+    }
+
+    private fun keepAsTyped(word: String) {
+        rejected += word
+        if (learningEnabled) learned.keepAsTyped(word)
+    }
+
+    private fun isKeptAsTyped(word: String) = word in rejected || learned.isKeptAsTyped(word)
+
+    /** The swiped word is final once the user moves on: learn it. */
+    private fun finishSwipe() {
+        swiped?.let { remember(it.word, it.previous) }
+        swiped = null
+    }
+
+    /** Records finished text ("word", or "let go" from a split) for frequency and word pairs. */
+    private fun remember(text: String, previous: String?) {
+        if (!learningEnabled) return
+        var prev = previous
+        for (word in text.split(' ')) {
+            if (word.isEmpty()) continue
+            learned.recordWord(word, prev)
+            prev = word
+        }
+    }
+
+    private fun forgetPhrase(text: String, previous: String?) {
+        var prev = previous
+        for (word in text.split(' ')) {
+            if (word.isEmpty()) continue
+            learned.retractWord(word, prev)
+            prev = word
+        }
     }
 
     private fun learn(word: String) {

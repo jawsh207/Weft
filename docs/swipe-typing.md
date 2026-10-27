@@ -50,7 +50,9 @@ Come back to these, roughly in order of value:
    curve, overshoot and cut corners. Keep on-device-only (nothing leaves the phone)
    stats, e.g. which alternative the user picks, to tune `Tuning` per user.
 2. **Better context.** Rank ambiguous pairs (for/four, to/too) with stronger
-   next-word data, including word pairs learned from the user's own typing.
+   next-word data. *Partly done:* the decoder now adds the user's own word
+   frequency and word pairs (`LearnedWords.boost` / `pairBoost`); longer
+   context (two words back) would help more.
 3. **Machine-learning decoder.** Train a small model (e.g. a GRU or
    transformer over the point sequence) on synthetic swipes generated from the
    dictionary plus any real data, export to ONNX or LiteRT, and run it on

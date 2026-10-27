@@ -40,10 +40,12 @@ Released and working:
   word completions, and next-word predictions, in a three-slot strip. Splits
   run-together words ("letgo" → "let go") and fixes contractions ("im" → "I'm")
 - **Autocorrect** on space or punctuation; delete right after undoes it, and that
-  word won't be corrected again in the session
-- **Learned words**, stored only on the device, plus the system personal
-  dictionary. Never learns in password fields or fields that request no
-  personalized learning (incognito)
+  word is never corrected again
+- **Learns from your typing**, stored only on the device: new words (plus the
+  system personal dictionary), the words you use most, and which words you
+  type together, used by suggestions, next-word predictions and swipe.
+  Long-press a suggestion to remove it. Never learns in password, incognito,
+  email or web address fields; clear it all in settings
 - Smart spacing: picking a suggestion adds a space; typing `.` or `,` next
   moves it after the punctuation
 - **Swipe typing** with Weft's own open source decoder: a trail follows your
@@ -126,8 +128,8 @@ app/src/main/java/app/weft/keyboard/
 
 ## Roadmap
 
-1. ~~Prediction~~ — done. Next: long-press a suggestion to forget a learned word,
-   learn word pairs from the user's own typing.
+1. ~~Prediction~~ — done, including learning from your own typing (word pairs,
+   personal frequency, long-press to remove a suggestion).
 2. ~~Full emoji picker~~ — done, with CLDR keyword search.
 3. ~~Long-press alternates~~ — done: accented letters, symbols, superscripts and fractions.
 4. **Settings** — haptics, key height, on-device voice preference, number row.

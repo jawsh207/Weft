@@ -43,7 +43,8 @@ data class FieldPolicy(
             return FieldPolicy(
                 suggestions = suggestions,
                 autocorrect = suggestions && prefs.autocorrect && !field.technical && !field.noSuggestions,
-                learning = prefs.learn && !field.isPassword && !field.noLearning,
+                // Emails and URLs aren't words: learning them would only add noise.
+                learning = prefs.learn && !field.isPassword && !field.noLearning && !field.technical,
                 swipe = prefs.swipe && predictable && !field.technical,
             )
         }
