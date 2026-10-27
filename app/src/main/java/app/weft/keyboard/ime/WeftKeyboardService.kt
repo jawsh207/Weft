@@ -46,6 +46,10 @@ import app.weft.keyboard.predict.SwipeDecoder
 import app.weft.keyboard.predict.TextContext
 import app.weft.keyboard.settings.Prefs
 import app.weft.keyboard.settings.autocorrect
+import app.weft.keyboard.settings.haptics
+import app.weft.keyboard.settings.keyHeight
+import app.weft.keyboard.settings.numberRow
+import app.weft.keyboard.settings.voiceOffline
 import app.weft.keyboard.settings.learnWords
 import app.weft.keyboard.settings.learnedReset
 import app.weft.keyboard.settings.showSuggestions
@@ -105,7 +109,10 @@ class WeftKeyboardService :
 
     /** "Clear" in settings takes effect at once, even if the keyboard is showing. */
     private val prefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
-        if (key == Prefs.LEARNED_RESET) applyLearnedReset(prefs.learnedReset())
+        when (key) {
+            Prefs.LEARNED_RESET -> applyLearnedReset(prefs.learnedReset())
+            Prefs.HAPTICS, Prefs.KEY_HEIGHT, Prefs.NUMBER_ROW -> applyLookAndFeel(prefs)
+        }
     }
 
     /** The current text field, for [TypingController]. */
@@ -287,6 +294,7 @@ class WeftKeyboardService :
             else -> KeyboardPage.Letters
         }
         if (state.shift != ShiftState.Locked) state.shift = ShiftState.Off
+        applyLookAndFeel(Prefs.of(this))
         configurePrediction(info)
         updateAutoCaps()
         refreshSuggestions()
@@ -320,6 +328,12 @@ class WeftKeyboardService :
         state.swipeEnabled = swipeAllowed && swipeDecoder != null
 
         applyLearnedReset(prefs.learnedReset())
+    }
+
+    private fun applyLookAndFeel(prefs: android.content.SharedPreferences) {
+        state.haptics = prefs.haptics()
+        state.keyHeight = prefs.keyHeight()
+        state.numberRow = prefs.numberRow()
     }
 
     private fun applyLearnedReset(reset: Int) {
@@ -627,7 +641,7 @@ class WeftKeyboardService :
                 typing.onInputStarted()
                 val before = currentInputConnection?.getTextBeforeCursor(1, 0)
                 voicePrefix = if (!before.isNullOrEmpty() && !before.last().isWhitespace()) " " else ""
-                voice.start()
+                voice.start(preferOffline = Prefs.of(this).voiceOffline())
             }
         }
     }

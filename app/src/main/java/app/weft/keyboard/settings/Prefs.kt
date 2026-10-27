@@ -2,6 +2,8 @@ package app.weft.keyboard.settings
 
 import android.content.Context
 import android.content.SharedPreferences
+import app.weft.keyboard.ui.HapticLevel
+import app.weft.keyboard.ui.KeyHeight
 
 /** Settings shared between the setup screen and the keyboard service. */
 object Prefs {
@@ -12,6 +14,10 @@ object Prefs {
 
     /** Bumped by "Clear learned words" so the running keyboard drops its copy too. */
     const val LEARNED_RESET = "learned_reset"
+    const val HAPTICS = "haptics"
+    const val KEY_HEIGHT = "key_height"
+    const val NUMBER_ROW = "number_row"
+    const val VOICE_OFFLINE = "voice_offline"
 
     fun of(context: Context): SharedPreferences =
         context.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -22,3 +28,7 @@ fun SharedPreferences.autocorrect() = getBoolean(Prefs.AUTOCORRECT, true)
 fun SharedPreferences.learnWords() = getBoolean(Prefs.LEARN_WORDS, true)
 fun SharedPreferences.swipeTyping() = getBoolean(Prefs.SWIPE, true)
 fun SharedPreferences.learnedReset() = getInt(Prefs.LEARNED_RESET, 0)
+fun SharedPreferences.haptics() = HapticLevel.of(getString(Prefs.HAPTICS, null))
+fun SharedPreferences.keyHeight() = KeyHeight.of(getString(Prefs.KEY_HEIGHT, null))
+fun SharedPreferences.numberRow() = getBoolean(Prefs.NUMBER_ROW, false)
+fun SharedPreferences.voiceOffline() = getBoolean(Prefs.VOICE_OFFLINE, false)

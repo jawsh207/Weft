@@ -1,7 +1,6 @@
 package app.weft.keyboard.ui
 
 import android.os.SystemClock
-import android.view.HapticFeedbackConstants
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -48,6 +47,7 @@ private const val PREVIEW_MS = 70L
 @Composable
 internal fun SwipeArea(rows: List<KeyRow>, state: KeyboardState, handlers: KeyHandlers) {
     val view = LocalView.current
+    val haptics = LocalKeyHaptics.current
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
     val trail = remember { mutableStateListOf<Offset>() }
@@ -96,7 +96,7 @@ internal fun SwipeArea(rows: List<KeyRow>, state: KeyboardState, handlers: KeyHa
                         scope.launch { fade.snapTo(1f) }
                         trail.clear()
                         trail += down.position
-                        view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                        haptics?.tick(view)
                     }
                     change.consume() // the key under the finger won't type
                     add(p)

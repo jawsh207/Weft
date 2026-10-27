@@ -46,6 +46,20 @@
     <string name="setup_try_hint">Type here</string>
 
     <string name="settings_typing_title">Typing</string>
+    <string name="settings_keys_title">Keys and voice</string>
+    <string name="settings_haptics">Vibration on key press</string>
+    <string name="settings_haptics_off">Off</string>
+    <string name="settings_haptics_light">Light</string>
+    <string name="settings_haptics_normal">Normal</string>
+    <string name="settings_haptics_strong">Strong</string>
+    <string name="settings_key_height">Key height</string>
+    <string name="settings_key_height_compact">Compact</string>
+    <string name="settings_key_height_normal">Normal</string>
+    <string name="settings_key_height_tall">Tall</string>
+    <string name="settings_number_row">Number row</string>
+    <string name="settings_number_row_body">Show 1–0 above the letters.</string>
+    <string name="settings_voice_offline">Prefer offline voice</string>
+    <string name="settings_voice_offline_body">Ask your speech engine to recognize speech on this phone instead of online, if it can. Weft always uses the engine chosen in system settings.</string>
     <string name="settings_suggestions">Show suggestions</string>
     <string name="settings_suggestions_body">Word suggestions and next-word predictions above the keys.</string>
     <string name="settings_autocorrect">Autocorrect</string>

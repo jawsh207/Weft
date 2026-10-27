@@ -5,7 +5,8 @@ package app.weft.keyboard.layout
  * draws with. Used for typo proximity now and swipe-path matching later.
  *
  * @param rowAspect row height divided by a standard key's width
- *   (58dp rows on a ~40dp-wide key ≈ 1.45; keep in sync with RowHeight).
+ *   (58dp rows on a ~40dp-wide key ≈ 1.45). SwipeArea maps every key height onto
+ *   this spacing, so the setting doesn't change swipe geometry.
  */
 object KeyGeometry {
     fun centers(rows: List<KeyRow>, rowAspect: Float = 1.45f): Map<Int, FloatArray> {

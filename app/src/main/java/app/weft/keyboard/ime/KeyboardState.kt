@@ -8,6 +8,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.weft.keyboard.emoji.EmojiCatalog
 import app.weft.keyboard.layout.KeyboardPage
+import app.weft.keyboard.ui.HapticLevel
+import app.weft.keyboard.ui.KeyHeight
 
 enum class ShiftState { Off, Once, Locked }
 
@@ -44,6 +46,11 @@ class KeyboardState {
 
     /** Something is on the clipboard, so Paste and Clear have work to do. */
     var clipboardHasContent by mutableStateOf(false)
+
+    // --- Look and feel (Settings) ---
+    var haptics by mutableStateOf(HapticLevel.Normal)
+    var keyHeight by mutableStateOf(KeyHeight.Normal)
+    var numberRow by mutableStateOf(false)
 
     var voiceAvailable by mutableStateOf(false)
     var listening by mutableStateOf(false)

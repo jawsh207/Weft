@@ -1,6 +1,5 @@
 package app.weft.keyboard.ui
 
-import android.view.HapticFeedbackConstants
 import android.view.inputmethod.EditorInfo
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.AnimatedVisibility
@@ -49,6 +48,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -63,6 +63,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -90,12 +91,14 @@ import app.weft.keyboard.layout.Layouts
 import kotlin.math.abs
 import kotlin.math.sign
 
-internal val RowHeight = 58.dp
 internal val KeyGap = 3.dp
 
 /** Space between the bottom row and the system navigation bar / IME switcher. */
 private val BottomClearance = 18.dp
 private const val KEY_ROWS = 4
+
+/** The optional number row is a little shorter than the letter rows. */
+private const val NUMBER_ROW_SCALE = 0.82f
 
 /** Horizontal travel on the space bar per one-character cursor step. */
 private val CursorStep = 12.dp
@@ -135,7 +138,25 @@ fun KeyboardScreen(
     val currentOnAlternate by rememberUpdatedState(onAlternate)
     popup.onPick = { currentOnAlternate(it) }
     val handlers = KeyHandlers(onKey, onCursor, popup, onSwipe)
+    val context = LocalContext.current
+    val haptics = remember(state.haptics) { KeyHaptics(context, state.haptics) }
 
+    CompositionLocalProvider(LocalKeyHaptics provides haptics, LocalRowHeight provides state.keyHeight.row) {
+        KeyboardLayout(state, handlers, popup, emoji, tools, onMic, onSuggestion, onRemoveSuggestion)
+    }
+}
+
+@Composable
+private fun KeyboardLayout(
+    state: KeyboardState,
+    handlers: KeyHandlers,
+    popup: AlternatesPopup,
+    emoji: EmojiActions,
+    tools: ToolActions,
+    onMic: () -> Unit,
+    onSuggestion: (SuggestionChip) -> Unit,
+    onRemoveSuggestion: (String) -> Unit,
+) {
     // The Box is the coordinate root for the long-press popup.
     Box(
         Modifier
@@ -158,6 +179,10 @@ fun KeyboardScreen(
                 }
             } else {
                 val rows = Layouts.rowsFor(state.page)
+                if (state.page == KeyboardPage.Letters && state.numberRow) {
+                    // Outside the swipe area, so swipe geometry still starts at the letters.
+                    KeyRowView(Layouts.numberRow, state, handlers, height = RowHeight * NUMBER_ROW_SCALE)
+                }
                 if (state.page == KeyboardPage.Letters && state.swipeEnabled) {
                     SwipeArea(rows, state, handlers)
                 } else {
@@ -417,11 +442,11 @@ private fun SuggestionSlot(
 }
 
 @Composable
-internal fun KeyRowView(row: KeyRow, state: KeyboardState, handlers: KeyHandlers) {
+internal fun KeyRowView(row: KeyRow, state: KeyboardState, handlers: KeyHandlers, height: Dp = RowHeight) {
     Row(
         Modifier
             .fillMaxWidth()
-            .height(RowHeight),
+            .height(height),
     ) {
         row.forEach { key -> KeySlot(key, state, handlers) }
     }
@@ -595,6 +620,7 @@ internal fun KeyButton(
     content: @Composable (tint: Color) -> Unit,
 ) {
     val view = LocalView.current
+    val haptics by rememberUpdatedState(LocalKeyHaptics.current)
     val currentOnTap by rememberUpdatedState(onTap)
     val currentGesture by rememberUpdatedState(gesture)
     var pressed by remember { mutableStateOf(false) }
@@ -636,7 +662,7 @@ internal fun KeyButton(
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     pressed = true
-                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                    haptics?.tap(view)
                     val g = currentGesture
                     try {
                         when (g) {
@@ -650,7 +676,7 @@ internal fun KeyButton(
                                 if (outcome == null) {
                                     while (outcome == null) {
                                         currentOnTap()
-                                        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                        haptics?.tap(view)
                                         outcome = withTimeoutOrNull(REPEAT_INTERVAL_MS) {
                                             Released(waitForUpOrCancellation() != null)
                                         }
@@ -680,7 +706,7 @@ internal fun KeyButton(
                                         if (target != moved) {
                                             handlers.onCursor(target - moved)
                                             moved = target
-                                            view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                                            haptics?.tick(view)
                                         }
                                     }
                                 }
@@ -694,7 +720,7 @@ internal fun KeyButton(
                                     if (released.normally) currentOnTap()
                                 } else {
                                     handlers.popup.open(g.options, bounds, g.onPick)
-                                    view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                    haptics?.longPress(view)
                                     while (true) {
                                         val change = awaitPointerEvent().changes
                                             .firstOrNull { it.id == down.id } ?: break

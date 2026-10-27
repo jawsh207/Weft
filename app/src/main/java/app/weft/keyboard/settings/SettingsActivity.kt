@@ -58,7 +58,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
+import app.weft.keyboard.ui.HapticLevel
+import app.weft.keyboard.ui.KeyHeight
 import androidx.compose.ui.semantics.Role
 import androidx.core.content.edit
 import app.weft.keyboard.ime.DictionaryLoader
@@ -182,6 +187,7 @@ private fun SetupScreen(requestMicOnLaunch: Boolean) {
             )
 
             TypingSettings()
+            KeysSettings()
             DictionaryInfo()
             SectionCard(stringResource(R.string.settings_emoji_title)) {
                 Text(
@@ -332,6 +338,88 @@ private fun TypingSettings() {
                 },
                 enabled = learnedCount > 0 || historyFile.exists(),
             ) { Text(stringResource(R.string.settings_clear_learned)) }
+        }
+    }
+}
+
+@Composable
+private fun KeysSettings() {
+    val context = LocalContext.current
+    val prefs = remember { Prefs.of(context) }
+    var haptics by remember { mutableStateOf(prefs.haptics()) }
+    var height by remember { mutableStateOf(prefs.keyHeight()) }
+    var numberRow by remember { mutableStateOf(prefs.numberRow()) }
+    var offline by remember { mutableStateOf(prefs.voiceOffline()) }
+
+    SectionCard(stringResource(R.string.settings_keys_title)) {
+        ChoiceRow(
+            title = stringResource(R.string.settings_haptics),
+            options = HapticLevel.entries,
+            selected = haptics,
+            label = {
+                stringResource(
+                    when (it) {
+                        HapticLevel.Off -> R.string.settings_haptics_off
+                        HapticLevel.Light -> R.string.settings_haptics_light
+                        HapticLevel.Normal -> R.string.settings_haptics_normal
+                        HapticLevel.Strong -> R.string.settings_haptics_strong
+                    },
+                )
+            },
+        ) {
+            haptics = it
+            prefs.edit { putString(Prefs.HAPTICS, it.key) }
+        }
+        ChoiceRow(
+            title = stringResource(R.string.settings_key_height),
+            options = KeyHeight.entries,
+            selected = height,
+            label = {
+                stringResource(
+                    when (it) {
+                        KeyHeight.Compact -> R.string.settings_key_height_compact
+                        KeyHeight.Normal -> R.string.settings_key_height_normal
+                        KeyHeight.Tall -> R.string.settings_key_height_tall
+                    },
+                )
+            },
+        ) {
+            height = it
+            prefs.edit { putString(Prefs.KEY_HEIGHT, it.key) }
+        }
+        SwitchRow(stringResource(R.string.settings_number_row), stringResource(R.string.settings_number_row_body), numberRow) {
+            numberRow = it
+            prefs.edit { putBoolean(Prefs.NUMBER_ROW, it) }
+        }
+        SwitchRow(stringResource(R.string.settings_voice_offline), stringResource(R.string.settings_voice_offline_body), offline) {
+            offline = it
+            prefs.edit { putBoolean(Prefs.VOICE_OFFLINE, it) }
+        }
+    }
+}
+
+/** A title over a row of connected buttons, one of which is chosen. */
+@Composable
+private fun <T> ChoiceRow(
+    title: String,
+    options: List<T>,
+    selected: T,
+    label: @Composable (T) -> String,
+    onSelect: (T) -> Unit,
+) {
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(title, style = MaterialTheme.typography.bodyLarge)
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            options.forEachIndexed { i, option ->
+                SegmentedButton(
+                    selected = option == selected,
+                    onClick = { onSelect(option) },
+                    shape = SegmentedButtonDefaults.itemShape(i, options.size),
+                ) { Text(label(option), maxLines = 1) }
+            }
         }
     }
 }

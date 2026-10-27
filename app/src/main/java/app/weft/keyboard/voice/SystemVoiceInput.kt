@@ -40,16 +40,13 @@ class SystemVoiceInput(
         get() = recognizer != null
 
     /**
-     * @param preferOnDevice use the engine's on-device mode when it offers one,
-     *   keeping audio off the network. Falls back to the normal system engine.
+     * @param preferOffline ask the user's chosen engine to recognize on the phone
+     *   (RecognizerIntent.EXTRA_PREFER_OFFLINE). It's a request: engines without
+     *   offline support ignore it. Weft never switches to a different engine.
      */
-    fun start(preferOnDevice: Boolean = false) {
+    fun start(preferOffline: Boolean = false) {
         stop()
-        val r = if (preferOnDevice && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) {
-            SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
-        } else {
-            SpeechRecognizer.createSpeechRecognizer(context)
-        }
+        val r = SpeechRecognizer.createSpeechRecognizer(context)
         r.setRecognitionListener(callbacks)
         recognizer = r
 
@@ -60,6 +57,7 @@ class SystemVoiceInput(
             )
             .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             .putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
+            .putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, preferOffline)
 
         listener.onListeningChanged(true)
         r.startListening(intent)

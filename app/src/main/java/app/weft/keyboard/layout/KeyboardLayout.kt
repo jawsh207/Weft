@@ -72,6 +72,9 @@ object Layouts {
         letterBottomRow(),
     )
 
+    /** Optional digits above the letters (Settings › Number row). */
+    val numberRow: KeyRow = chars("1234567890")
+
     val symbols: List<KeyRow> = listOf(
         chars("1234567890"),
         chars("@#\$_%&-+()"),

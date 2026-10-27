@@ -27,7 +27,7 @@ Released and working:
 - Enter key that adapts to the field (search, send, go, next, done, newline)
 - Grapheme-aware backspace with hold-to-repeat (deletes 👨‍👩‍👧 or 🇨🇦 in one press)
 - Expressive press motion: keys squish and round out on a spring
-- System haptics on every key press
+- Haptics on every key press, at the strength you choose
 - Voice input through the system speech engine, with live partial results
 - **Emoji picker** with every Unicode emoji, drawn in the phone's own emoji font:
   category tabs, recently used, skin tones on long-press (remembered per
@@ -35,6 +35,9 @@ Released and working:
   "us" for 🇺🇸). Emoji the font can't draw are hidden
 - Setup screen: enable keyboard, switch to it, grant the mic, test field
 - Settings to turn suggestions, autocorrect, swipe typing and word learning on or off, and to clear learned words
+- **Keys and voice settings:** vibration strength (off, light, normal, strong),
+  key height (compact, normal, tall), an optional number row, and "prefer
+  offline voice", which asks your chosen speech engine to stay on the phone
 - Tools key beside the suggestions: slides out Paste, Clear clipboard and Settings
 - **Suggestions:** typo correction that knows which keys are next to each other,
   word completions, and next-word predictions, in a three-slot strip. Splits
@@ -132,7 +135,7 @@ app/src/main/java/app/weft/keyboard/
    personal frequency, long-press to remove a suggestion).
 2. ~~Full emoji picker~~ — done, with CLDR keyword search.
 3. ~~Long-press alternates~~ — done: accented letters, symbols, superscripts and fractions.
-4. **Settings** — haptics, key height, on-device voice preference, number row.
+4. ~~Settings~~ — done: vibration strength, key height, number row, prefer offline voice.
 5. **Large screens** — floating, one-handed and split layouts for tablets and foldables.
 6. ~~Gesture typing~~ — first version done. Improvements to come back to
    (learning from real use, ML decoder, timing, multi-word swipes) are listed in
