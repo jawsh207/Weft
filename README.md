@@ -40,8 +40,13 @@ Released and working:
   offline voice", which asks your chosen speech engine to stay on the phone
 - Tools key beside the suggestions: slides out Paste, Clear clipboard and Settings
 - **Suggestions:** typo correction that knows which keys are next to each other,
-  word completions, and next-word predictions, in a three-slot strip. Splits
-  run-together words ("letgo" → "let go") and fixes contractions ("im" → "I'm")
+  word completions, and next-word predictions that look two words back ("see
+  you" → "later"), in a three-slot strip. Splits run-together words ("letgo" →
+  "let go") and fixes contractions ("im" → "I'm")
+- **English (US, UK, Canada, Australia):** pick the keyboard language in system
+  settings; each has its own spellings ("colour", "organise", "centre")
+- Names, places and brands with their capitals ("Seattle", "Priya", "Spotify")
+- **Emoji suggestions:** "pizza" offers 🍕, "lol" offers 😂; tap to add it after the word
 - **Autocorrect** on space or punctuation; delete right after undoes it, and that
   word is never corrected again
 - **Learns from your typing**, stored only on the device: new words (plus the
@@ -113,7 +118,10 @@ base64 -w0 weft.jks   # on macOS: base64 -i weft.jks
 5. Follow the setup screen to enable the keyboard.
 
 From the command line: `./gradlew assembleDebug`.
-Unit tests (prediction engine and typing behavior): `./gradlew test`.
+Unit tests (prediction engine and typing behavior): `./gradlew test`. With the
+real dictionary present, `TypingBenchmarkTest` and `SwipeAccuracyTest` also
+score autocorrect, predictions and swipe; see
+[tools/dictgen/README.md](tools/dictgen/README.md#benchmark).
 
 ## Project layout
 
@@ -140,7 +148,8 @@ app/src/main/java/app/weft/keyboard/
 6. ~~Gesture typing~~ — first version done. Improvements to come back to
    (learning from real use, ML decoder, timing, multi-word swipes) are listed in
    [docs/swipe-typing.md](docs/swipe-typing.md#future-improvements).
-7. **More languages** — layouts and dictionaries per subtype.
+7. **More languages** — English variants (US, UK, Canada, Australia) done; other
+   languages need layouts and dictionaries per subtype.
 
 ## FOSS rules for this repo
 

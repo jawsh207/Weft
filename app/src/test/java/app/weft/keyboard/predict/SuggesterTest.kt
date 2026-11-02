@@ -314,4 +314,14 @@ class SuggesterTest {
     fun twoWordPlacesPredictTheirSecondWord() {
         assertEquals("Angeles", suggester.suggest("", "Los").suggestions.first().word)
     }
+
+    @Test
+    fun regionalVariantIsTheSameDictionaryRespelled() {
+        val gz = javaClass.classLoader!!.getResourceAsStream("fixture_en_GB.ekd.gz")!!
+        val gb = BinaryDictionary(ByteBuffer.wrap(java.util.zip.GZIPInputStream(gz).readBytes()))
+        assertTrue(gb.meta.contains("\"locale\": \"en_GB\""))
+        assertTrue(gb.meta.contains("ESDB"))
+        assertEquals(dict.nodeCount > 0, gb.nodeCount > 0)
+        assertTrue(gb.hasTrigrams)
+    }
 }

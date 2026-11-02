@@ -27,19 +27,24 @@ OUT = Path(__file__).resolve().parent / "sources" / "en.names.tsv"
 
 def ranked(types: str, limit: int, extra: str = "", min_links: int = 3) -> str:
     """
-    Items of any of [types] with an English label, most sitelinks first. The
-    sitelinks filter comes before the label join so the public endpoint stays
-    well inside its 60-second limit.
+    Items of any of [types], most sitelinks first, with their English labels.
+    The inner query picks the items without touching labels (name items have
+    hundreds, one per script), and the label service then looks up only the
+    English label of those few thousand, which keeps the public endpoint well
+    inside its 60-second limit.
     """
     return f"""
-SELECT DISTINCT ?label ?n WHERE {{
-  VALUES ?type {{ {types} }}
-  ?item wdt:P31 ?type ; wikibase:sitelinks ?n .
-  FILTER(?n >= {min_links})
-  {extra}
-  ?item rdfs:label ?label .
-  FILTER(LANG(?label) = "en")
-}} ORDER BY DESC(?n) LIMIT {limit}"""
+SELECT ?label ?n WHERE {{
+  {{
+    SELECT ?item (MAX(?links) AS ?n) WHERE {{
+      VALUES ?type {{ {types} }}
+      ?item wdt:P31 ?type ; wikibase:sitelinks ?links .
+      FILTER(?links >= {min_links})
+      {extra}
+    }} GROUP BY ?item ORDER BY DESC(?n) LIMIT {limit}
+  }}
+  SERVICE wikibase:label {{ bd:serviceParam wikibase:language "en" . ?item rdfs:label ?label . }}
+}} ORDER BY DESC(?n)"""
 
 
 QUERIES = {
