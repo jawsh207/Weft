@@ -33,16 +33,26 @@ class BinaryDictionary(buffer: ByteBuffer) {
     private val bigramFreqs: ByteBuffer
     private val bigramWordCount: Int
 
+    // Three-word context (format version 2; empty for version 1).
+    private val trigramContextCount: Int
+    private val trigramFirst: IntBuffer
+    private val trigramSecond: IntBuffer
+    private val trigramStart: IntBuffer
+    private val trigramNext: IntBuffer
+    private val trigramFreqs: ByteBuffer
+
     init {
         val b = buffer.duplicate().order(ByteOrder.LITTLE_ENDIAN)
         b.position(0)
         val magic = ByteArray(4).also { b.get(it) }
         require(String(magic, Charsets.US_ASCII) == "EKD1") { "Not an .ekd dictionary" }
         val version = b.int
-        require(version == 1) { "Unsupported dictionary version $version" }
+        require(version == 1 || version == 2) { "Unsupported dictionary version $version" }
         nodeCount = b.int
         bigramWordCount = b.int
         val bigramEntries = b.int
+        trigramContextCount = if (version >= 2) b.int else 0
+        val trigramEntries = if (version >= 2) b.int else 0
         val metaLength = b.int
         meta = ByteArray(metaLength).also { b.get(it) }.toString(Charsets.UTF_8).trim()
 
@@ -64,6 +74,12 @@ class BinaryDictionary(buffer: ByteBuffer) {
         maxSubs = take(nodeCount)
         flags = take(nodeCount)
         bigramFreqs = take(bigramEntries)
+        if (version >= 2) b.position(b.position() + (-b.position() and 3)) // pad to 4
+        trigramFirst = take(trigramContextCount * 4).asIntBuffer()
+        trigramSecond = take(trigramContextCount * 4).asIntBuffer()
+        trigramStart = take((if (version >= 2) trigramContextCount + 1 else 0) * 4).asIntBuffer()
+        trigramNext = take(trigramEntries * 4).asIntBuffer()
+        trigramFreqs = take(trigramEntries)
     }
 
     fun char(node: Int): Int = chars.get(node)
@@ -176,6 +192,38 @@ class BinaryDictionary(buffer: ByteBuffer) {
     /** Strength (0..255) of [next] following [previous]. */
     fun bigramStrength(previous: Int, next: Int): Int =
         bigrams(previous).firstOrNull { it.first == next }?.second ?: 0
+
+    val hasTrigrams: Boolean get() = trigramContextCount > 0
+
+    /**
+     * Words that are notably likely after [first] [second] ("I want" → "to"),
+     * beyond what [second] alone predicts: (word node, strength 1..255).
+     */
+    fun trigrams(first: Int, second: Int): List<Pair<Int, Int>> {
+        var lo = 0
+        var hi = trigramContextCount - 1
+        while (lo <= hi) {
+            val mid = (lo + hi) ushr 1
+            val a = trigramFirst.get(mid)
+            val c = if (a != first) a.compareTo(first) else trigramSecond.get(mid).compareTo(second)
+            when {
+                c < 0 -> lo = mid + 1
+                c > 0 -> hi = mid - 1
+                else -> {
+                    val from = trigramStart.get(mid)
+                    val to = trigramStart.get(mid + 1)
+                    return (from until to).map {
+                        trigramNext.get(it) to (trigramFreqs.get(it).toInt() and 0xFF)
+                    }
+                }
+            }
+        }
+        return emptyList()
+    }
+
+    /** Strength (0..255) of [next] following [first] [second]; 0 if nothing special. */
+    fun trigramStrength(first: Int, second: Int, next: Int): Int =
+        if (first < 0 || second < 0) 0 else trigrams(first, second).firstOrNull { it.first == next }?.second ?: 0
 
     companion object {
         const val FLAG_OFFENSIVE = 0x01

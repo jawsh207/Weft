@@ -20,12 +20,25 @@ Inputs (all optional, but at least one frequency source is required):
                      lists lack them: texting words ("lol", "idk"), lowercase
                      "ok". Ranked by subtitle frequency when available.
   --block FILE       Words to drop entirely (repeatable).
+  --tatoeba FILE     Tatoeba sentence export (id, lang, text; .bz2 ok). Everyday,
+                     conversational sentences for next-word pairs and three-word
+                     context. Sentences whose id is a multiple of 50 are held
+                     out for the benchmark (tools/bench). CC BY 2.0 FR.
+                     The Leipzig archive's -sentences.txt is used the same way.
+  --names FILE       Names and places (tools/dictgen/fetch_names.py, from
+                     Wikidata, CC0): label, kind, rank. Added with their
+                     capitals, without displacing common lowercase words.
+  --variants FILE    US → regional spellings (sources/en_variants.tsv, from ESDB).
+  --variant-out R=PATH
+                     Also write the dictionary for region R (GB, CA, AU) to PATH,
+                     respelled with --variants (repeatable). PATH may end in .gz.
 
 Only the Python standard library is used. Output is deterministic for the same
 inputs, which keeps F-Droid builds reproducible.
 
-Binary format (little endian), version 1:
+Binary format (little endian), version 2:
   "EKD1" | u32 version | u32 nodeCount | u32 bigramWords | u32 bigramEntries
+  | u32 trigramContexts | u32 trigramEntries            (version 2 only)
   | u32 metaLength | meta (UTF-8 JSON, padded to 4 bytes)
   | i32 chars[nodeCount] | i32 firstChild[nodeCount] | i32 parent[nodeCount]
   | i32 bigramWord[bigramWords] | i32 bigramStart[bigramWords + 1]
@@ -33,6 +46,12 @@ Binary format (little endian), version 1:
   | u16 childCount[nodeCount]
   | u8 freq[nodeCount] | u8 maxSub[nodeCount] | u8 flags[nodeCount]
   | u8 bigramFreq[bigramEntries]
+  | padding to 4 bytes                                  (version 2 only from here)
+  | i32 trigramFirst[contexts] | i32 trigramSecond[contexts]   (sorted pairs)
+  | i32 trigramStart[contexts + 1] | i32 trigramNext[entries]
+  | u8 trigramFreq[entries]
+
+Version 1 is the same without the trigram parts.
 
 Nodes are laid out breadth-first, so each node's children are contiguous and
 sorted by code point. Node 0 is the root. freq > 0 marks the end of a word;
@@ -43,10 +62,13 @@ from __future__ import annotations
 
 import argparse
 import array
+import bz2
 import gzip
 import io
 import json
 import math
+import os
+import re
 import sys
 import tarfile
 import time
@@ -54,7 +76,11 @@ import unicodedata
 from collections import deque
 from pathlib import Path
 
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
+TATOEBA_HOLDOUT = 50  # keep in sync with tools/bench/make_bench.py
+TOKEN = re.compile(r"[^\W\d_]+(?:['’][^\W\d_]+)*")
+# Context doesn't carry across punctuation (like the keyboard's TextContext).
+CHUNK_BREAK = re.compile(r"[^\w\s'’-]+|\s-\s|_")
 FLAG_OFFENSIVE = 0x01
 MAX_WORD_LEN = 32
 APOSTROPHES = {"’": "'", "ʼ": "'", "‘": "'"}
@@ -104,12 +130,13 @@ def log_scale(count: float, max_count: float) -> int:
 
 
 class Entry:
-    __slots__ = ("word", "aosp", "sub", "offensive", "not_a_word", "bigrams")
+    __slots__ = ("word", "aosp", "sub", "name", "offensive", "not_a_word", "bigrams")
 
     def __init__(self, word: str):
         self.word = word
         self.aosp: int | None = None
         self.sub: int | None = None
+        self.name: int | None = None  # frequency given to a name or place
         self.offensive = False
         self.not_a_word = False
         self.bigrams: dict[str, int] = {}
@@ -226,6 +253,71 @@ def read_leipzig(path: Path) -> tuple[dict[int, tuple[str, int]], list[tuple[int
         if len(parts) >= 3 and parts[0].isdigit() and parts[1].isdigit() and parts[2].isdigit():
             pairs.append((int(parts[0]), int(parts[1]), int(parts[2])))
     return words, pairs
+
+
+def leipzig_sentences(path: Path):
+    """Sentences from a Leipzig archive's -sentences.txt (id, sentence)."""
+    def lines():
+        if path.is_dir():
+            files = sorted(path.glob("*-sentences.txt"))
+            if files:
+                with open_text(files[0]) as f:
+                    yield from f
+            return
+        with tarfile.open(path) as tar:
+            member = next((m for m in tar.getmembers() if m.name.endswith("-sentences.txt")), None)
+            if member is None:
+                return
+            with io.TextIOWrapper(tar.extractfile(member), encoding="utf-8", errors="replace") as f:
+                yield from f
+    for line in lines():
+        parts = line.rstrip("\n").split("\t", 1)
+        if len(parts) == 2:
+            yield parts[1]
+
+
+def tatoeba_sentences(path: Path):
+    """Training sentences from a Tatoeba export (id, lang, text), minus the benchmark's."""
+    opener = bz2.open if path.suffix == ".bz2" else open
+    with opener(path, "rt", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            parts = line.rstrip("\n").split("\t")
+            if len(parts) >= 3 and parts[0].isdigit() and int(parts[0]) % TATOEBA_HOLDOUT != 0:
+                yield parts[2]
+
+
+def chunks_of(sentence: str):
+    """Runs of words with no punctuation between them."""
+    for part in CHUNK_BREAK.split(sentence):
+        tokens = [normalize(t) for t in TOKEN.findall(part)]
+        if tokens:
+            yield tokens
+
+
+def read_names(path: Path) -> list[tuple[str, str, int]]:
+    """label, kind, rank (1 = most notable within its kind)."""
+    out = []
+    with open_text(path) as f:
+        for line in f:
+            if line.startswith("#"):
+                continue
+            parts = line.rstrip("\n").split("\t")
+            if len(parts) >= 3 and parts[2].isdigit():
+                out.append((normalize(parts[0]), parts[1], int(parts[2])))
+    return out
+
+
+def read_variants(path: Path) -> dict[str, dict[str, tuple[str, int, bool]]]:
+    """region → {us spelling: (regional spelling, us level in region, keep us)}."""
+    out: dict[str, dict[str, tuple[str, int, bool]]] = {}
+    with open_text(path) as f:
+        for line in f:
+            if line.startswith("#"):
+                continue
+            parts = line.rstrip("\n").split("\t")
+            if len(parts) == 5:
+                out.setdefault(parts[0], {})[parts[1]] = (parts[2], int(parts[3]), parts[4] == "1")
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -359,6 +451,14 @@ def merge(args) -> tuple[dict[str, Entry], list[dict], dict]:
         })
         print(f"  Leipzig: {len(per_first):,} words with next-word data", file=sys.stderr)
 
+    if args.names:
+        add_names(read_names(Path(args.names)), entries, resolver, args)
+        sources.append({
+            "name": "Wikidata (names and places)",
+            "license": "CC0-1.0",
+            "url": "https://www.wikidata.org",
+        })
+
     if allow:
         sources.append({"name": "Allow list(s): " + ", ".join(Path(a).name for a in args.allow),
                         "license": "see source", "url": ""})
@@ -370,16 +470,85 @@ def merge(args) -> tuple[dict[str, Entry], list[dict], dict]:
     return entries, sources, header
 
 
+NAME_KINDS_WITH_PAIRS = {"place", "country", "region", "org"}
+
+
+def add_names(names: list[tuple[str, str, int]], entries: dict[str, Entry], resolver: Resolver, args) -> None:
+    """
+    Names and places with their capitals. Rank within each kind sets the
+    frequency (the most notable ~170, tapering to ~80). A name never displaces
+    a common lowercase word: "Will", "Rose" and "May" stay "will", "rose", "may".
+    Two-word places ("New York", "Los Angeles") add both words and the pair.
+    """
+    # A new name one edit away from a very common word would hijack its typo
+    # ("Teh" the surname vs "teh" → "the"), so those are left out.
+    common = {w.lower() for w, e in entries.items() if final_frequency(e, args.casual_weight) >= NAME_NEAR_COMMON}
+    by_kind: dict[str, int] = {}
+    for _, kind, rank in names:
+        by_kind[kind] = max(by_kind.get(kind, 0), rank)
+    added = boosted = skipped = 0
+    for label, kind, rank in names:
+        parts = label.split(" ")
+        if len(parts) > 2 or not all(is_valid_word(p) for p in parts):
+            continue
+        freq = round(170 - 90 * math.sqrt((rank - 1) / max(1, by_kind[kind] - 1)))
+        for i, word in enumerate(parts):
+            if not word[0].isupper():
+                break
+            # A second word gets less on its own ("Angeles" alone is rare).
+            f = freq if len(parts) == 1 else freq - 25
+            e = entries.get(word)
+            if e is None:
+                low = entries.get(word.lower())
+                if low is not None and final_frequency(low, args.casual_weight) >= NAME_COMMON_WORD:
+                    continue
+                if any(x in common for x in edits1(word.lower())):
+                    skipped += 1
+                    continue
+                e = resolver.add(word)
+                added += 1
+            else:
+                boosted += 1
+            e.name = max(e.name or 0, f)
+        if len(parts) == 2 and kind in NAME_KINDS_WITH_PAIRS and parts[0] in entries and parts[1] in entries:
+            entries[parts[0]].bigrams[parts[1]] = 230
+    print(f"  Names: {added:,} added, {boosted:,} already known, {skipped:,} too close to common words",
+          file=sys.stderr)
+
+
+NAME_COMMON_WORD = 100
+NAME_NEAR_COMMON = 170
+LETTERS = "abcdefghijklmnopqrstuvwxyz'"
+
+
+def edits1(word: str) -> set[str]:
+    """Everything one deletion, swap, change or insertion away."""
+    splits = [(word[:i], word[i:]) for i in range(len(word) + 1)]
+    out = {a + b[1:] for a, b in splits if b}
+    out |= {a + b[1] + b[0] + b[2:] for a, b in splits if len(b) > 1}
+    out |= {a + c + b[1:] for a, b in splits if b for c in LETTERS}
+    out |= {a + c + b for a, b in splits for c in LETTERS}
+    out.discard(word)
+    return out
+
+
 def final_frequency(e: Entry, casual_weight: float) -> int:
+    f = base_frequency(e, casual_weight)
+    if e.name is not None:
+        f = max(f, e.name)
+    return max(1, min(255, round(f)))
+
+
+def base_frequency(e: Entry, casual_weight: float) -> float:
+    if e.aosp is None and e.sub is None:
+        return 0
     if e.aosp is not None and e.sub is not None:
         f = casual_weight * e.sub + (1 - casual_weight) * e.aosp
     elif e.aosp is not None:
         f = e.aosp
-    elif e.sub is not None:
-        f = e.sub * 0.85  # unvetted by AOSP: rank a little lower
     else:
-        f = 0
-    return max(1, min(255, round(f)))
+        f = e.sub * 0.85  # unvetted by AOSP: rank a little lower
+    return f
 
 
 # ---------------------------------------------------------------------------
@@ -413,7 +582,8 @@ def u16(values) -> bytes:
 
 
 def write_dictionary(path: Path, words: dict[str, tuple[int, int]],
-                     bigrams: dict[str, list[tuple[str, int]]], meta: dict) -> int:
+                     bigrams: dict[str, list[tuple[str, int]]], meta: dict,
+                     trigrams: dict[tuple[str, str], list[tuple[str, int]]] | None = None) -> int:
     root = Node(0)
     for word in sorted(words):
         node = root
@@ -467,12 +637,24 @@ def write_dictionary(path: Path, words: dict[str, tuple[int, int]],
             bigram_freq.append(bf)
     bigram_start.append(len(bigram_next))
 
+    tri_first, tri_second, tri_start, tri_next, tri_freq = [], [], [], [], []
+    for (a, b), nexts in sorted(((node_of(a), node_of(b)), lst) for (a, b), lst in (trigrams or {}).items() if lst):
+        tri_first.append(a)
+        tri_second.append(b)
+        tri_start.append(len(tri_next))
+        for nxt, tf in nexts:
+            tri_next.append(node_of(nxt))
+            tri_freq.append(tf)
+    tri_start.append(len(tri_next))
+
     meta_bytes = json.dumps(meta, ensure_ascii=False, sort_keys=True).encode("utf-8")
     meta_bytes += b" " * (-len(meta_bytes) % 4)
 
-    with open(path, "wb") as f:
+    out = io.BytesIO()
+    with out as f:
         f.write(b"EKD1")
-        f.write(i32([FORMAT_VERSION, n, len(bigram_word), len(bigram_next), len(meta_bytes)]))
+        f.write(i32([FORMAT_VERSION, n, len(bigram_word), len(bigram_next),
+                     len(tri_first), len(tri_next), len(meta_bytes)]))
         f.write(meta_bytes)
         f.write(i32(chars))
         f.write(i32(first_child))
@@ -485,6 +667,19 @@ def write_dictionary(path: Path, words: dict[str, tuple[int, int]],
         f.write(bytes(max_sub))
         f.write(flags)
         f.write(bytes(bigram_freq))
+        f.write(b"\0" * (-f.tell() % 4))
+        f.write(i32(tri_first))
+        f.write(i32(tri_second))
+        f.write(i32(tri_start))
+        f.write(i32(tri_next))
+        f.write(bytes(tri_freq))
+        data = f.getvalue()
+    if path.suffix == ".gz":
+        # mtime=0 and no file name keep the output byte-identical between builds.
+        with open(path, "wb") as raw, gzip.GzipFile(fileobj=raw, mode="wb", compresslevel=9, mtime=0, filename="") as gz:
+            gz.write(data)
+    else:
+        path.write_bytes(data)
     return n
 
 
@@ -503,12 +698,20 @@ def main() -> None:
     p.add_argument("--allow", action="append")
     p.add_argument("--casual", action="append")
     p.add_argument("--block", action="append")
+    p.add_argument("--tatoeba")
+    p.add_argument("--names")
+    p.add_argument("--variants")
+    p.add_argument("--variant-out", action="append", metavar="REGION=PATH")
     p.add_argument("--out", required=True, help="Output .ekd path")
     p.add_argument("--max-words", type=int, default=150_000)
     p.add_argument("--min-count", type=int, default=3, help="Ignore subtitle words seen fewer times")
     p.add_argument("--casual-weight", type=float, default=0.4,
                    help="0..1: how much subtitle (casual) frequency counts vs AOSP")
     p.add_argument("--bigrams-per-word", type=int, default=12)
+    p.add_argument("--trigrams-per-context", type=int, default=6)
+    p.add_argument("--trigram-min-count", type=int, default=3)
+    p.add_argument("--trigram-min-context", type=int, default=8)
+    p.add_argument("--max-trigram-contexts", type=int, default=120_000)
     p.add_argument("--date", type=int, default=None,
                    help="Version stamp (default: SOURCE_DATE_EPOCH or now)")
     args = p.parse_args()
@@ -526,14 +729,33 @@ def main() -> None:
         for e in kept
     }
 
+    # Next-word data from sentences (Leipzig news, Tatoeba conversation).
+    context = SentenceCounts(words)
+    if args.leipzig:
+        context.add(leipzig_sentences(Path(args.leipzig)))
+    if args.tatoeba:
+        context.add(tatoeba_sentences(Path(args.tatoeba)))
+        sources.append({
+            "name": "Tatoeba sentences",
+            "license": "CC-BY-2.0-FR",
+            "url": "https://tatoeba.org",
+        })
+    if context.tokens:
+        print(f"  Sentences: {context.tokens:,} words, {len(context.pairs):,} pairs, "
+              f"{len(context.triples):,} triples", file=sys.stderr)
+        for first, nexts in context.bigram_strengths().items():
+            e = entries[first]
+            for nxt, strength in nexts.items():
+                e.bigrams[nxt] = max(e.bigrams.get(nxt, 0), strength)
+
     bigrams: dict[str, list[tuple[str, int]]] = {}
     for e in kept:
         nexts = sorted(((w, f) for w, f in e.bigrams.items() if w in words and f > 0),
                        key=lambda x: (-x[1], x[0]))
         if nexts:
             bigrams[e.word] = nexts[: args.bigrams_per_word]
+    trigrams = context.trigrams(bigrams, args) if context.tokens else {}
 
-    import os
     date = args.date or int(os.environ.get("SOURCE_DATE_EPOCH", time.time()))
     meta = {
         "locale": args.locale,
@@ -542,12 +764,178 @@ def main() -> None:
         "wordCount": len(words),
         "sources": sources,
     }
-    out = Path(args.out)
+    write(Path(args.out), words, bigrams, trigrams, meta)
+
+    if args.variant_out:
+        if not args.variants:
+            p.error("--variant-out needs --variants")
+        variants = read_variants(Path(args.variants))
+        for spec in args.variant_out:
+            region, _, path = spec.partition("=")
+            locale, description = REGION_LOCALES[region]
+            w2, b2, t2 = respell(words, bigrams, trigrams, variants[region])
+            meta2 = dict(meta, locale=locale, description=description, wordCount=len(w2),
+                         sources=sources + [{
+                             "name": "English Speller Database (ESDB, formerly SCOWL), regional spellings",
+                             "license": "MIT-like",
+                             "url": "https://github.com/en-wl/wordlist",
+                         }])
+            write(Path(path), w2, b2, t2, meta2)
+
+
+REGION_LOCALES = {
+    "GB": ("en_GB", "English (UK)"),
+    "CA": ("en_CA", "English (Canada)"),
+    "AU": ("en_AU", "English (Australia)"),
+}
+
+
+def write(out: Path, words, bigrams, trigrams, meta) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
-    nodes = write_dictionary(out, words, bigrams, meta)
+    nodes = write_dictionary(out, words, bigrams, meta, trigrams)
     size = out.stat().st_size
     print(f"Wrote {out}: {len(words):,} words, {nodes:,} nodes, "
-          f"{sum(len(v) for v in bigrams.values()):,} bigrams, {size / 1e6:.1f} MB", file=sys.stderr)
+          f"{sum(len(v) for v in bigrams.values()):,} bigrams, "
+          f"{sum(len(v) for v in trigrams.values()):,} trigrams in {len(trigrams):,} contexts, "
+          f"{size / 1e6:.1f} MB", file=sys.stderr)
+
+
+# ---------------------------------------------------------------------------
+# Sentence statistics: word pairs and three-word context
+# ---------------------------------------------------------------------------
+
+
+class SentenceCounts:
+    """Counts word pairs and triples over the dictionary's words, as integer ids."""
+
+    def __init__(self, words: dict[str, tuple[int, int]]):
+        assert len(words) < 1 << 18, "word ids must fit in 18 bits"
+        self.names = sorted(words)
+        self.ids = {w: i for i, w in enumerate(self.names)}
+        self.lower: dict[str, int] = {}
+        # Lowercase lookups prefer the lowercase word ("The" → "the"), else the most common casing.
+        for w in sorted(words, key=lambda w: (w != w.lower(), -words[w][0], w)):
+            self.lower.setdefault(w.lower(), self.ids[w])
+        self.unigrams: dict[int, int] = {}
+        self.pairs: dict[int, int] = {}
+        self.triples: dict[int, int] = {}
+        self.tokens = 0
+
+    def _id(self, token: str) -> int | None:
+        i = self.ids.get(token)
+        return i if i is not None else self.lower.get(token.lower())
+
+    def add(self, sentences) -> None:
+        uni, pairs, triples = self.unigrams, self.pairs, self.triples
+        for sentence in sentences:
+            for chunk in chunks_of(sentence):
+                prev2 = prev = None
+                for token in chunk:
+                    i = self._id(token)
+                    self.tokens += 1
+                    if i is None:
+                        prev2 = prev = None
+                        continue
+                    if prev is not None:
+                        k2 = (prev << 18) | i
+                        pairs[k2] = pairs.get(k2, 0) + 1
+                        if prev2 is not None:
+                            k3 = (prev2 << 36) | k2
+                            triples[k3] = triples.get(k3, 0) + 1
+                        uni[prev] = uni.get(prev, 0) + 1  # times seen as a context
+                    prev2, prev = prev, i
+
+    def bigram_strengths(self) -> dict[str, dict[str, int]]:
+        """P(next | first) on the dictionary's log scale, for pairs seen often enough."""
+        out: dict[str, dict[str, int]] = {}
+        for k, count in self.pairs.items():
+            if count < MIN_PAIR_COUNT:
+                continue
+            a, b = k >> 18, k & 0x3FFFF
+            out.setdefault(self.names[a], {})[self.names[b]] = log_scale(count, self.unigrams[a])
+        return out
+
+    def trigrams(self, bigrams: dict[str, list[tuple[str, int]]], args) -> dict[tuple[str, str], list[tuple[str, int]]]:
+        """
+        Third words worth knowing given the two before: seen often enough, and
+        clearly likelier than the pair alone predicts (otherwise the bigram
+        already does the job and the entry only costs space).
+        """
+        pair_strength = {(a, w): f for a, lst in bigrams.items() for w, f in lst}
+        per_context: dict[int, list[tuple[int, int]]] = {}
+        for k3, count in self.triples.items():
+            if count < args.trigram_min_count:
+                continue
+            k2 = k3 >> 18
+            per_context.setdefault(k2 >> 0, []).append((k3 & 0x3FFFF, count))
+        contexts = []
+        for k2, nexts in per_context.items():
+            total = self.pairs.get(k2 & ((1 << 36) - 1), 0)
+            if total < args.trigram_min_context:
+                continue
+            a, b = self.names[(k2 >> 18) & 0x3FFFF], self.names[k2 & 0x3FFFF]
+            kept = []
+            for c, count in nexts:
+                strength = log_scale(count, total)
+                word = self.names[c]
+                if strength >= pair_strength.get((b, word), 0) + TRIGRAM_GAIN:
+                    kept.append((word, strength))
+            if kept:
+                kept.sort(key=lambda x: (-x[1], x[0]))
+                contexts.append((total, a, b, kept[: args.trigrams_per_context]))
+        contexts.sort(key=lambda x: (-x[0], x[1], x[2]))
+        return {(a, b): kept for _, a, b, kept in contexts[: args.max_trigram_contexts]}
+
+
+MIN_PAIR_COUNT = 3
+TRIGRAM_GAIN = 13  # at least twice as likely as the pair alone suggests
+
+
+# ---------------------------------------------------------------------------
+# Regional spellings
+# ---------------------------------------------------------------------------
+
+
+def respell(words, bigrams, trigrams, mapping: dict[str, tuple[str, int, bool]]):
+    """
+    The same dictionary with a region's spellings: "colour" takes "color"'s
+    frequency and context. The US spelling stays known (so it isn't
+    "corrected") but ranks lower, a little if the region also uses it
+    (Canadian "color"), a lot if not.
+    """
+    def demoted(f: int, level: int) -> int:
+        return max(1, f - (13 if level <= 4 else 39 if level <= 6 else 65))
+
+    def spell(w: str) -> str:
+        m = mapping.get(w)
+        return m[0] if m else w
+
+    w2 = dict(words)
+    for u, (freq, flags) in words.items():
+        m = mapping.get(u)
+        if not m:
+            continue
+        v, level, keep = m
+        old = w2.get(v)
+        w2[v] = (max(freq, old[0] if old else 0), flags | (old[1] if old else 0))
+        if not keep:
+            w2[u] = (demoted(freq, level), flags)
+
+    b2: dict[str, list[tuple[str, int]]] = {}
+    for first, nexts in bigrams.items():
+        for f in {first, spell(first)}:
+            merged = dict(b2.get(f, []))
+            for nxt, strength in nexts:
+                merged[spell(nxt)] = max(merged.get(spell(nxt), 0), strength)
+            b2[f] = sorted(merged.items(), key=lambda x: (-x[1], x[0]))
+    t2: dict[tuple[str, str], list[tuple[str, int]]] = {}
+    for (a, b), nexts in trigrams.items():
+        key = (spell(a), spell(b))
+        merged = dict(t2.get(key, []))
+        for nxt, strength in nexts:
+            merged[spell(nxt)] = max(merged.get(spell(nxt), 0), strength)
+        t2[key] = sorted(merged.items(), key=lambda x: (-x[1], x[0]))
+    return w2, b2, t2
 
 
 if __name__ == "__main__":

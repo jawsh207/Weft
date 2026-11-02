@@ -91,7 +91,7 @@ class TypingController(private val learned: LearnedWords) {
     fun compute(ctx: WordContext): SuggestionResult {
         val s = suggester
         if (!suggestionsEnabled || s == null) return SuggestionResult.EMPTY
-        return s.suggest(ctx.fragment, ctx.previous)
+        return s.suggest(ctx.fragment, ctx.previous, before = ctx.before)
     }
 
     /** Remembers [result] (so space can reuse it) and returns chips for the strip. */
@@ -298,7 +298,8 @@ class TypingController(private val learned: LearnedWords) {
         if (!autocorrectEnabled || !suggestionsEnabled) return null
         if (ctx.fragment.isEmpty() || isKeptAsTyped(ctx.fragment)) return null
         val s = suggester ?: return null
-        val result = lastResult?.takeIf { it.typed == ctx.fragment } ?: s.suggest(ctx.fragment, ctx.previous)
+        val result = lastResult?.takeIf { it.typed == ctx.fragment }
+            ?: s.suggest(ctx.fragment, ctx.previous, before = ctx.before)
         return result.autocorrect?.word
     }
 

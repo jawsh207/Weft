@@ -5,7 +5,12 @@ package app.weft.keyboard.predict
  * cursor. [previous] is null at the start of a sentence or after punctuation,
  * since next-word predictions don't carry across those.
  */
-data class WordContext(val fragment: String, val previous: String?)
+data class WordContext(
+    val fragment: String,
+    val previous: String?,
+    /** The word before [previous], under the same rules (plain spaces only). */
+    val before: String? = null,
+)
 
 object TextContext {
 
@@ -35,7 +40,24 @@ object TextContext {
         }
         while (s < end && (text[s] == '\'' || text[s] == '’' || text[s] == '-')) s++
         val previous = text.substring(s, end).takeIf { it.isNotEmpty() }
-        return WordContext(fragment, previous)
+            ?: return WordContext(fragment, null)
+        return WordContext(fragment, previous, wordBefore(text, s))
+    }
+
+    /** The word ending just before [start] across plain spaces, or null. */
+    private fun wordBefore(text: String, start: Int): String? {
+        var i = start
+        while (i > 0 && text[i - 1] == ' ') i--
+        if (i == start) return null
+        val end = i
+        var s = end
+        while (s > 0) {
+            val cp = Character.codePointBefore(text, s)
+            if (!isWordChar(cp)) break
+            s -= Character.charCount(cp)
+        }
+        while (s < end && (text[s] == '\'' || text[s] == '’' || text[s] == '-')) s++
+        return text.substring(s, end).takeIf { it.isNotEmpty() }
     }
 
     fun isWordChar(cp: Int): Boolean =

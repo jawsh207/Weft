@@ -1,0 +1,8 @@
+1	We want to go home now.
+2	We want to go to the store.
+3	We want to know what you think.
+4	Do you want to go?
+5	I am going to the store, and then home.
+6	See you later tonight.
+7	I will see you later.
+8	See you later, OK?

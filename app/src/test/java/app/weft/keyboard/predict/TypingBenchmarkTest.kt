@@ -58,22 +58,30 @@ class TypingBenchmarkTest {
             ),
         )
 
-        // Real words that space would change.
+        // Words from real sentences that space would change: dictionary words, and
+        // words it doesn't know (mostly names), which a bold autocorrect would mangle.
         var words = 0
         var changed = 0
+        var unknown = 0
+        var unknownChanged = 0
         for (sentence in sentences(data)) {
             for (chunk in chunks(sentence)) {
                 var previous: String? = null
                 for (w in chunk) {
+                    val auto = suggester.suggest(w, previous).autocorrect
                     if (suggester.isKnown(w)) {
                         words++
-                        if (suggester.suggest(w, previous).autocorrect != null) changed++
+                        if (auto != null) changed++
+                    } else {
+                        unknown++
+                        if (auto != null) unknownChanged++
                     }
                     previous = w
                 }
             }
         }
         report("false corrections %.2f%% of %d real words".format(pct(changed, words), words))
+        report("unknown words changed %.1f%% of %d".format(pct(unknownChanged, unknown), unknown))
         assertTrue("autocorrect fixes too few misspellings", pct(fixed, pairs.size) >= MIN_FIXED)
         assertTrue("autocorrect changes too many real words", pct(changed, words) <= MAX_FALSE)
     }

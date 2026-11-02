@@ -85,6 +85,16 @@ def main() -> None:
         cmd += ["--leipzig", str(paths["leipzig"])]
     if paths.get("allow"):
         cmd += ["--allow", str(paths["allow"])]
+    if paths.get("tatoeba"):
+        cmd += ["--tatoeba", str(paths["tatoeba"])]
+    names = HERE / "sources" / config.get("names", f"{locale}.names.tsv")
+    if names.exists():
+        cmd += ["--names", str(names)]
+    variants = config.get("variants")
+    if variants:
+        cmd += ["--variants", str(HERE / "sources" / variants["file"])]
+        for region, out in variants["outputs"].items():
+            cmd += ["--variant-out", f"{region}={ASSETS / out}"]
     casual = HERE / "sources" / f"{locale}.casual.txt"
     if casual.exists():
         cmd += ["--casual", str(casual)]

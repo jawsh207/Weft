@@ -420,10 +420,11 @@ class WeftKeyboardService :
         val ctx = typing.context(editor)
         // Context for ranking: the word just before where this one will go.
         val previous = ctx.fragment.ifEmpty { null } ?: ctx.previous
+        val before = if (ctx.fragment.isNotEmpty()) ctx.previous else ctx.before
         swipeJob?.cancel()
         if (done) {
             suggestJob?.cancel()
-            val words = decoder.decode(xs, ys, previous).map { applyShift(it.word) }
+            val words = decoder.decode(xs, ys, previous, before = before).map { applyShift(it.word) }
             if (words.isEmpty()) return
             state.message = null
             typing.onSwipe(editor, words)
@@ -431,7 +432,7 @@ class WeftKeyboardService :
             return
         }
         swipeJob = lifecycleScope.launch {
-            val words = withContext(Dispatchers.Default) { decoder.decode(xs, ys, previous) }
+            val words = withContext(Dispatchers.Default) { decoder.decode(xs, ys, previous, before = before) }
                 .map { applyShift(it.word) }
             if (words.isNotEmpty()) {
                 state.suggestions = listOf(

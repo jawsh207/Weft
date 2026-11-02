@@ -48,7 +48,14 @@ class SwipeDecoder(
         return len
     }
 
-    fun decode(xs: FloatArray, ys: FloatArray, previous: String?, limit: Int = 5): List<Candidate> {
+    /** [previous] is the word before this one, [before] the one before that. */
+    fun decode(
+        xs: FloatArray,
+        ys: FloatArray,
+        previous: String?,
+        limit: Int = 5,
+        before: String? = null,
+    ): List<Candidate> {
         if (xs.size < 2 || xs.size != ys.size) return emptyList()
         if (pathLength(xs, ys) < MIN_PATH) return emptyList()
 
@@ -58,12 +65,18 @@ class SwipeDecoder(
 
         val dict = dictionary
         val prevNode = if (dict != null && previous != null) dict.findIgnoreCase(previous) else -1
+        val prev2Node = if (dict != null && before != null && prevNode >= 0 && dict.hasTrigrams) {
+            dict.findIgnoreCase(before)
+        } else {
+            -1
+        }
         if (dict != null) {
             CandidateSearch(dict, dense).run { node, word ->
                 if (learned.isRemoved(word)) return@run
                 val geometry = geometry(word, shape) ?: return@run
                 var score = dict.freq(node) / 25.5f - tuning.geometry * geometry
                 if (prevNode >= 0) score += dict.bigramStrength(prevNode, node) / 255f * BIGRAM_WEIGHT
+                if (prev2Node >= 0) score += dict.trigramStrength(prev2Node, prevNode, node) / 255f * BIGRAM_WEIGHT
                 // "world's" traces almost the same path as "world"; prefer the plain word.
                 if (word.endsWith("'s")) score -= POSSESSIVE_PENALTY
                 // The user's habits break ties between look-alike paths (for/four, to/too).

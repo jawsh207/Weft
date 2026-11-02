@@ -58,10 +58,15 @@ class Suggester(
     fun suggest(typed: String, previous: String?, limit: Int = 3, before: String? = null): SuggestionResult {
         val dict = dictionary
         val prevNode = if (dict != null && previous != null) dict.findIgnoreCase(previous) else -1
+        val prev2Node = if (dict != null && before != null && prevNode >= 0 && dict.hasTrigrams) {
+            dict.findIgnoreCase(before)
+        } else {
+            -1
+        }
 
         if (typed.isEmpty()) {
             if (previous == null) return SuggestionResult.EMPTY
-            return SuggestionResult("", predict(dict, prevNode, previous, limit), true, null)
+            return SuggestionResult("", predict(dict, prev2Node, prevNode, previous, limit), true, null)
         }
 
         val t = typed.lowercase().codePoints().toArray()
@@ -81,13 +86,13 @@ class Suggester(
                 if (dict.isOffensive(node) && cost > 0f) continue
                 val word = dict.word(node)
                 val kind = if (cost <= EXACT_COST) SuggestionKind.Exact else SuggestionKind.Correction
-                offer(Suggestion(word, kind, score(word, dict.freq(node), cost, kind, dict, prevNode, node, previous), cost))
+                offer(Suggestion(word, kind, score(word, dict.freq(node), cost, kind, dict, prev2Node, prevNode, node, previous), cost))
             }
             for ((node, cost) in completions(dict, search.prefixHits)) {
                 if (dict.isOffensive(node)) continue
                 val word = dict.word(node)
                 val extra = (word.codePointCount(0, word.length) - t.size).coerceAtLeast(1)
-                val s = score(word, dict.freq(node), cost, SuggestionKind.Completion, dict, prevNode, node, previous) -
+                val s = score(word, dict.freq(node), cost, SuggestionKind.Completion, dict, prev2Node, prevNode, node, previous) -
                     0.12f * extra
                 offer(Suggestion(word, SuggestionKind.Completion, s, cost))
             }
@@ -97,10 +102,10 @@ class Suggester(
             val (full, prefix) = distance(t, word)
             if (full <= budget) {
                 val kind = if (full <= EXACT_COST) SuggestionKind.Exact else SuggestionKind.Correction
-                offer(Suggestion(word, kind, score(word, freq, full, kind, null, -1, -1, previous), full))
+                offer(Suggestion(word, kind, score(word, freq, full, kind, null, -1, -1, -1, previous), full))
             } else if (prefix <= budget && t.size >= 2) {
                 offer(Suggestion(word, SuggestionKind.Completion,
-                    score(word, freq, prefix, SuggestionKind.Completion, null, -1, -1, previous), prefix))
+                    score(word, freq, prefix, SuggestionKind.Completion, null, -1, -1, -1, previous), prefix))
             }
         }
 
@@ -117,7 +122,12 @@ class Suggester(
             typed = typed,
             suggestions = ranked.take(limit),
             typedIsKnown = typedIsKnown,
-            autocorrect = if (typedIsKnown) contractionFor(typed, ranked) else pickAutocorrect(t.size, ranked),
+            autocorrect = when {
+                typedIsKnown -> contractionFor(typed, ranked)
+                // ALL CAPS is usually an acronym ("SIM", "NASA"): never complete it into a longer word.
+                isAcronym(typed) -> pickAutocorrect(t.size, ranked.filter { it.kind != SuggestionKind.Completion })
+                else -> pickAutocorrect(t.size, ranked)
+            },
         )
     }
 
@@ -139,6 +149,8 @@ class Suggester(
         return candidate.takeIf { dict.freq(candidateNode) - dict.freq(typedNode) >= CONTRACTION_MARGIN }
     }
 
+    private fun isAcronym(typed: String) = typed.length >= 2 && typed.none { it.isLowerCase() }
+
     /** Is [word] a real word as typed (allowing sentence-start capitals or all caps)? */
     fun isKnown(word: String): Boolean {
         val dict = dictionary
@@ -158,7 +170,13 @@ class Suggester(
      * (they're the strongest signal), then the dictionary's, each nudged by
      * how often the user types that word.
      */
-    private fun predict(dict: BinaryDictionary?, prevNode: Int, previous: String, limit: Int): List<Suggestion> {
+    private fun predict(
+        dict: BinaryDictionary?,
+        prev2Node: Int,
+        prevNode: Int,
+        previous: String,
+        limit: Int,
+    ): List<Suggestion> {
         val found = HashMap<String, Suggestion>()
         fun offer(word: String, score: Float) {
             if (learned.isRemoved(word)) return
@@ -171,6 +189,15 @@ class Suggester(
                 if (dict.isOffensive(node)) continue
                 val word = dict.word(node)
                 offer(word, strength / 25.5f + learned.boost(word) + learned.pairBoost(previous, word))
+            }
+            // Two words back ("I want" → "to"): more specific than the pair, so it gets a nudge.
+            if (prev2Node >= 0) {
+                for ((node, strength) in dict.trigrams(prev2Node, prevNode)) {
+                    if (dict.isOffensive(node)) continue
+                    val word = dict.word(node)
+                    offer(word, strength / 25.5f + TRIGRAM_PREDICTION_BONUS + learned.boost(word) +
+                        learned.pairBoost(previous, word))
+                }
             }
         }
         for ((word, uses) in learned.nextWords(previous)) {
@@ -192,6 +219,7 @@ class Suggester(
         cost: Float,
         kind: SuggestionKind,
         dict: BinaryDictionary?,
+        prev2Node: Int,
         prevNode: Int,
         node: Int,
         previous: String?,
@@ -201,6 +229,7 @@ class Suggester(
         if (kind == SuggestionKind.Completion) s -= COMPLETION_PENALTY
         if (dict != null && prevNode >= 0 && node >= 0) {
             s += dict.bigramStrength(prevNode, node) / 255f * BIGRAM_WEIGHT
+            if (prev2Node >= 0) s += dict.trigramStrength(prev2Node, prevNode, node) / 255f * TRIGRAM_WEIGHT
         }
         // The user's own habits: words they use often, and what they type after [previous].
         s += learned.boost(word) + learned.pairBoost(previous, word)
@@ -222,6 +251,17 @@ class Suggester(
             ?.takeIf { it.score >= best.score - EXACT_PRIORITY }
             ?.let { return it }
         if (best.kind == SuggestionKind.Prediction) return null
+        // A split ("all though") only wins when no single word is about as good:
+        // "allthough" is "although", but "letgo" is "let go".
+        if (' ' in best.word) {
+            ranked.firstOrNull { ' ' !in it.word && it.cost <= 1f && it.score >= best.score - SPLIT_YIELD }
+                ?.let { single -> return confident(length, single, ranked) }
+        }
+        return confident(length, best, ranked)
+    }
+
+    /** [best] if it's close enough to what was typed and clearly the likeliest word. */
+    private fun confident(length: Int, best: Suggestion, ranked: List<Suggestion>): Suggestion? {
         val maxCost = when {
             length <= 2 -> 0.5f
             length <= 4 -> 1.0f
@@ -229,8 +269,12 @@ class Suggester(
         }
         if (best.cost > maxCost) return null
         val minScore = if (best.kind == SuggestionKind.Completion) MIN_COMPLETION_SCORE else MIN_AUTOCORRECT_SCORE
-        if (best.score < minScore) return null
-        return best
+        if (best.score >= minScore) return best
+        // A rarer word can still be the obvious fix for a longer typo: one small
+        // edit away and well ahead of anything else ("Farenheit" → "Fahrenheit").
+        if (length < CLEAR_MIN_LENGTH || best.cost > 1f || best.score < CLEAR_MIN_SCORE) return null
+        val runnerUp = ranked.firstOrNull { it !== best && ' ' !in it.word }?.score ?: Float.NEGATIVE_INFINITY
+        return best.takeIf { it.score - runnerUp >= CLEAR_MARGIN }
     }
 
     /**
@@ -252,6 +296,7 @@ class Suggester(
 
         fun suggestion(nodes: List<Int>): Suggestion {
             var score = nodes.minOf { dict.freq(it) } / 25.5f - SPLIT_COST * (nodes.size - 1) * COST_WEIGHT
+            if (nodes.size > 2) score -= THREE_WORD_SPLIT_PENALTY
             for (i in 1 until nodes.size) score += dict.bigramStrength(nodes[i - 1], nodes[i]) / 255f * BIGRAM_WEIGHT
             if (prevNode >= 0) score += dict.bigramStrength(prevNode, nodes[0]) / 255f * BIGRAM_WEIGHT
             val text = nodes.joinToString(" ") { dict.word(it) }
@@ -401,6 +446,8 @@ class Suggester(
         const val EXACT_BONUS = 2f
         const val COMPLETION_PENALTY = 1.2f
         const val BIGRAM_WEIGHT = 3f
+        const val TRIGRAM_WEIGHT = 3f
+        const val TRIGRAM_PREDICTION_BONUS = 0.5f
 
         /** Score of a word pair the user has typed twice, before its boosts; strong dictionary pairs reach ~8.6. */
         const val PERSONAL_PREDICTION_BASE = 7f
@@ -413,6 +460,15 @@ class Suggester(
         const val EXACT_PRIORITY = 2f
 
         const val SPLIT_COST = 0.5f
+
+        /** A single word this close to the best split ("although" vs "all though") is preferred. */
+        const val SPLIT_YIELD = 3f
+        const val THREE_WORD_SPLIT_PENALTY = 1f
+
+        /** Rare-but-obvious corrections: long enough, one edit, and this far ahead of the runner-up. */
+        const val CLEAR_MIN_LENGTH = 5
+        const val CLEAR_MARGIN = 1.5f
+        const val CLEAR_MIN_SCORE = -4f
         const val MIN_SPLIT_FREQ = 100
 
         /** How much more frequent (log scale, 13 ≈ 2×) a contraction must be to replace a real word. */

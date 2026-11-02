@@ -218,7 +218,9 @@ class SuggesterTest {
     fun parsesContext() {
         assertEquals(WordContext("wor", "Hello"), TextContext.parse("Hello wor"))
         assertEquals(WordContext("wor", null), TextContext.parse("Hi. wor"))
-        assertEquals(WordContext("", "I"), TextContext.parse("so I "))
+        assertEquals(WordContext("", "I", "so"), TextContext.parse("so I "))
+        assertEquals(WordContext("", "I", null), TextContext.parse("Yes, I "))
+        assertEquals(WordContext("go", "to", "want"), TextContext.parse("I want to go"))
         assertEquals(WordContext("don't", null), TextContext.parse("don't"))
         assertEquals(WordContext("", null), TextContext.parse(""))
         assertEquals(WordContext("x", null), TextContext.parse("'x"))
@@ -276,5 +278,40 @@ class SuggesterTest {
         val target = before.last()
         repeat(6) { learned.recordWord(target, "over") }
         assertEquals(target, suggester.suggest("ther", "over").suggestions.first().word)
+    }
+
+    // --- Format 2: three-word context, names --------------------------------------------------
+
+    @Test
+    fun readsTrigrams() {
+        assertTrue(dict.hasTrigrams)
+        val see = dict.findIgnoreCase("see")
+        val you = dict.findIgnoreCase("you")
+        val later = dict.findIgnoreCase("later")
+        assertTrue(dict.trigramStrength(see, you, later) > 200)
+        assertEquals(0, dict.trigramStrength(-1, you, later))
+        assertTrue(dict.trigrams(you, see).isEmpty())
+    }
+
+    @Test
+    fun twoWordsBackSharpensPredictions() {
+        // After "you" alone the dictionary expects "know" or "are"; after "see you", "later".
+        assertFalse(suggester.suggest("", "you").suggestions.first().word == "later")
+        assertEquals("later", suggester.suggest("", "you", before = "see").suggestions.first().word)
+        // Typing too: "l" after "see you" completes to "later".
+        assertEquals("later", suggester.suggest("lat", "you", before = "see").suggestions.first().word)
+    }
+
+    @Test
+    fun namesAreAddedWithCapitals() {
+        assertTrue(dict.find("Priya") >= 0)
+        assertTrue(dict.find("Seattle") >= 0)
+        assertTrue(dict.find("Angeles") >= 0)
+        assertEquals("Priya", suggester.suggest("priya", null).autocorrect?.word)
+    }
+
+    @Test
+    fun twoWordPlacesPredictTheirSecondWord() {
+        assertEquals("Angeles", suggester.suggest("", "Los").suggestions.first().word)
     }
 }

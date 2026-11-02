@@ -1,2 +1,14 @@
 # Test casual words
 ok
+want
+go
+home
+see
+later
+so
+much
+thank
+what
+mean
+do
+to
