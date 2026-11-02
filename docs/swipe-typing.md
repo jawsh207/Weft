@@ -30,25 +30,45 @@ Code: `predict/SwipeDecoder.kt` (decoder, no Android dependencies),
 
 ## Measuring
 
-`SwipeAccuracyTest` swipes ~380 common words from the real dictionary with
-realistic wobble and checks the floor. It prints the numbers, so run it before
-and after any change:
+`SwipeAccuracyTest` swipes ~380 common words from the real dictionary three ways
+and checks a floor for each. It prints the numbers (CI shows them on each Build
+run), so run it before and after any change:
 
 ```
 ./gradlew testDebugUnitTest --tests '*SwipeAccuracyTest*' -i | grep "Swipe accuracy"
 ```
 
-Baseline (October 2026): top-1 ≈ 97%, top-3 ≈ 99.7%, about 0.5 ms per decode
-on a desktop JVM. Remaining misses are mostly words that trace the same line
-on QWERTY (for/four, to/too, of/off, or/our), where frequency and context decide.
+The swipes come from `SwipeSimulator` (in the test sources, ready to generate
+training data for a learned decoder later):
+
+- **straight:** straight lines between slightly off-centre letters (the original test);
+- **natural:** like a relaxed thumb: the whole gesture shifted (thumbs land low)
+  and scaled, each letter aimed at with Gaussian error, corners cut at sharp
+  turns, a smooth curve rather than straight segments, an overshoot as the
+  finger lifts, slow near letters and fast between them;
+- **hurried:** the same errors one and a half times as large.
+
+| Swipes | Top-1 before (Oct 2026) | Top-1 now | Top-3 now |
+|---|---|---|---|
+| Straight | 96.8% | 96.8% | 99.7% |
+| Natural | 92.6% | 93.4% | 99.7% |
+| Hurried | 67.9% | 84.1% | 96.6% |
+
+The natural set showed the decoder's weak spot: it only considered words whose
+letters the path passed within 0.95 of a key width, and hurried thumbs miss
+that. The radii are now 1.4 (ranking still prefers close paths), names get a
+small handicap, and case twins ("major"/"Major") are offered once. A decode
+takes about 1–1.5 ms on a desktop JVM. Remaining misses are mostly words that
+trace the same line on QWERTY (for/four, to/too, of/off, the/there), where
+frequency and context decide; in real typing the previous two words help.
 
 ## Future improvements
 
 Come back to these, roughly in order of value:
 
-1. **Learn from real use.** Synthetic swipes are straight lines; real thumbs
-   curve, overshoot and cut corners. Keep on-device-only (nothing leaves the phone)
-   stats, e.g. which alternative the user picks, to tune `Tuning` per user.
+1. **Learn from real use.** `SwipeSimulator` now imitates human swipes, but
+   every thumb differs. Keep on-device-only (nothing leaves the phone) stats,
+   e.g. which alternative the user picks, to tune `Tuning` per user.
 2. **Better context.** Rank ambiguous pairs (for/four, to/too) with stronger
    next-word data. *Partly done:* the decoder now adds the user's own word
    frequency and word pairs (`LearnedWords.boost` / `pairBoost`); longer

@@ -37,6 +37,13 @@ class SwipeDecoder(
         val endpoints: Float = 2f,
         /** Weight of the normalized-shape term within the geometry distance. */
         val shape: Float = 0.6f,
+        /** How close (key widths) the swipe must start / end to a word's first / last letter. */
+        val startRadius: Float = START_RADIUS,
+        val endRadius: Float = END_RADIUS,
+        /** How close it must pass each letter in between. */
+        val passRadius: Float = PASS_RADIUS,
+        /** Small handicap for words the dictionary only has capitalized (names, places). */
+        val namePenalty: Float = NAME_PENALTY,
     )
 
     data class Candidate(val word: String, val score: Float, val geometry: Float)
@@ -81,6 +88,9 @@ class SwipeDecoder(
                 if (word.endsWith("'s")) score -= POSSESSIVE_PENALTY
                 // The user's habits break ties between look-alike paths (for/four, to/too).
                 score += learned.boost(word) + learned.pairBoost(previous, word)
+                if (word[0].isUpperCase() && !learned.isKnown(word) && dict.find(word.lowercase()) < 0) {
+                    score -= tuning.namePenalty
+                }
                 keepBest(found, Candidate(word, score, geometry))
             }
         }
@@ -90,7 +100,8 @@ class SwipeDecoder(
             val score = freq / 25.5f - tuning.geometry * geometry + learned.boost(word) + learned.pairBoost(previous, word)
             keepBest(found, Candidate(word, score, geometry))
         }
-        return found.values.sortedByDescending { it.score }.take(limit)
+        // "major" and "Major" trace the same path: offer the likelier one once.
+        return found.values.sortedByDescending { it.score }.distinctBy { it.word.lowercase() }.take(limit)
     }
 
     // --- Candidate search ----------------------------------------------------------
@@ -127,7 +138,7 @@ class SwipeDecoder(
                         nextLast = lastKey
                     }
                     prevKey < 0 -> {
-                        if (distTo(path[0], center) > START_RADIUS) continue
+                        if (distTo(path[0], center) > tuning.startRadius) continue
                         nextIndex = 0
                         nextLast = key
                     }
@@ -144,7 +155,7 @@ class SwipeDecoder(
                 word.appendCodePoint(raw)
                 if (dict.freq(child) > 0 && !dict.isOffensive(child) && nextLast >= 0) {
                     val end = centers[nextLast]!!
-                    if (distTo(path[last], end) <= END_RADIUS) onWord(child, word.toString())
+                    if (distTo(path[last], end) <= tuning.endRadius) onWord(child, word.toString())
                 }
                 walk(child, nextIndex, if (center == null) prevKey else key, nextLast, onWord)
                 word.setLength(word.length - Character.charCount(raw))
@@ -153,7 +164,7 @@ class SwipeDecoder(
 
         /** First path index at or after [from] that passes near [center], or -1. */
         private fun findNear(center: FloatArray, from: Int): Int {
-            for (j in from..last) if (distTo(path[j], center) <= PASS_RADIUS) return j
+            for (j in from..last) if (distTo(path[j], center) <= tuning.passRadius) return j
             return -1
         }
     }
@@ -162,13 +173,13 @@ class SwipeDecoder(
     private fun passesThrough(word: String, path: Array<FloatArray>): Boolean {
         val keys = keysOf(word)
         if (keys.isEmpty()) return false
-        if (distTo(path[0], keys.first()) > START_RADIUS) return false
-        if (distTo(path[path.size - 1], keys.last()) > END_RADIUS) return false
+        if (distTo(path[0], keys.first()) > tuning.startRadius) return false
+        if (distTo(path[path.size - 1], keys.last()) > tuning.endRadius) return false
         var index = 0
         for (k in 1 until keys.size) {
             if (keys[k] === keys[k - 1]) continue
             var j = index
-            while (j < path.size && distTo(path[j], keys[k]) > PASS_RADIUS) j++
+            while (j < path.size && distTo(path[j], keys[k]) > tuning.passRadius) j++
             if (j == path.size) return false
             index = j
         }
@@ -214,11 +225,15 @@ class SwipeDecoder(
 
     companion object {
         const val MIN_PATH = 0.6f
-        const val START_RADIUS = 1.1f
-        const val END_RADIUS = 1.1f
-        const val PASS_RADIUS = 0.95f
+        // Radii and the name handicap were tuned on human-like synthetic swipes
+        // (SwipeSimulator: curved, corner-cutting, shifted, overshooting). Wider radii
+        // keep hurried swipes' words in the running; ranking still prefers close paths.
+        const val START_RADIUS = 1.4f
+        const val END_RADIUS = 1.4f
+        const val PASS_RADIUS = 1.4f
         const val BIGRAM_WEIGHT = 3f
         const val POSSESSIVE_PENALTY = 1f
+        const val NAME_PENALTY = 1f
         const val DENSE_POINTS = 120
         const val SHAPE_POINTS = 48
         const val MAX_VISITS = 200_000

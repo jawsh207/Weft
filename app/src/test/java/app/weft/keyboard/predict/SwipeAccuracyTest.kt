@@ -14,7 +14,9 @@ import kotlin.random.Random
  * Guards against regressions and is the place to measure improvements; see
  * docs/swipe-typing.md. Skipped if the dictionary hasn't been built.
  *
- * Baseline (Oct 2026, ~380 common words): top-1 ≈ 97%, top-3 ≈ 99.7%.
+ * Results (Nov 2026, ~380 common words), top-1 / top-3: straight 96.8% / 99.7%,
+ * natural 93.4% / 99.7%, hurried 84.1% / 96.6%. Before tuning on natural swipes the
+ * decoder managed 92.6% and 67.9% top-1 on the natural and hurried sets.
  */
 class SwipeAccuracyTest {
 
@@ -38,46 +40,33 @@ class SwipeAccuracyTest {
             .shuffled(rnd)
             .take(SAMPLE)
 
-        var top1 = 0
-        var top3 = 0
-        for (w in words) {
-            val (xs, ys) = swipe(w, centers, rnd)
-            val got = decoder.decode(xs, ys, null).map { it.word.lowercase() }
-            if (got.firstOrNull() == w) top1++
-            if (w in got.take(3)) top3++
-        }
-        val p1 = top1 * 100.0 / words.size
-        val p3 = top3 * 100.0 / words.size
+        val sim = SwipeSimulator(centers, rnd)
+        val (p1, p3) = score(decoder, words) { sim.straight(it, WOBBLE) }
         println("Swipe accuracy: top-1 %.1f%%, top-3 %.1f%% (%d words)".format(p1, p3, words.size))
         assertTrue("top-1 $p1% below floor", p1 >= MIN_TOP1)
         assertTrue("top-3 $p3% below floor", p3 >= MIN_TOP3)
+
+        // Human-like swipes: curved, corner-cutting, shifted, overshooting (SwipeSimulator).
+        val natural = SwipeSimulator(centers, Random(11))
+        for ((label, sloppiness, floor) in listOf(Triple("natural", 1f, MIN_NATURAL), Triple("hurried", 1.5f, MIN_HURRIED))) {
+            val (n1, n3) = score(decoder, words) { natural.natural(it, sloppiness) }
+            println("Swipe accuracy ($label): top-1 %.1f%%, top-3 %.1f%%".format(n1, n3))
+            assertTrue("$label top-1 $n1% below floor", n1 >= floor)
+        }
     }
 
-    private fun swipe(word: String, centers: Map<Int, FloatArray>, rnd: Random): Pair<FloatArray, FloatArray> {
-        val corners = ArrayList<FloatArray>()
-        var last = -1
-        for (c in word) {
-            val k = centers[c.code] ?: continue
-            if (c.code == last) continue
-            last = c.code
-            corners += floatArrayOf(
-                k[0] + (rnd.nextFloat() * 2 - 1) * WOBBLE,
-                k[1] + (rnd.nextFloat() * 2 - 1) * WOBBLE,
-            )
+    private fun score(decoder: SwipeDecoder, words: List<String>, make: (String) -> SwipeSimulator.Swipe?): Pair<Double, Double> {
+        var top1 = 0
+        var top3 = 0
+        var n = 0
+        for (w in words) {
+            val swipe = make(w) ?: continue
+            n++
+            val got = decoder.decode(swipe.xs, swipe.ys, null).map { it.word.lowercase() }
+            if (got.firstOrNull() == w) top1++
+            if (w in got.take(3)) top3++
         }
-        if (corners.size == 1) corners += floatArrayOf(corners[0][0] + 0.05f, corners[0][1])
-        val xs = ArrayList<Float>()
-        val ys = ArrayList<Float>()
-        for (i in 0 until corners.size - 1) {
-            for (s in 0 until 6) {
-                val t = s / 6f
-                xs += corners[i][0] + (corners[i + 1][0] - corners[i][0]) * t + (rnd.nextFloat() - 0.5f) * 0.08f
-                ys += corners[i][1] + (corners[i + 1][1] - corners[i][1]) * t + (rnd.nextFloat() - 0.5f) * 0.08f
-            }
-        }
-        xs += corners.last()[0]
-        ys += corners.last()[1]
-        return xs.toFloatArray() to ys.toFloatArray()
+        return top1 * 100.0 / n to top3 * 100.0 / n
     }
 
     private companion object {
@@ -85,5 +74,7 @@ class SwipeAccuracyTest {
         const val WOBBLE = 0.42f // ≈ the "normal" noise level in the benchmark
         const val MIN_TOP1 = 93.0
         const val MIN_TOP3 = 99.0
+        const val MIN_NATURAL = 90.0
+        const val MIN_HURRIED = 78.0
     }
 }
