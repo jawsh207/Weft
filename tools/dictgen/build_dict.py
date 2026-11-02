@@ -25,6 +25,11 @@ Inputs (all optional, but at least one frequency source is required):
                      context. Sentences whose id is a multiple of 50 are held
                      out for the benchmark (tools/bench). CC BY 2.0 FR.
                      The Leipzig archive's -sentences.txt is used the same way.
+  --sentences NAME|LICENSE|URL|FILE
+                     More plain-text sentences, one per line, for word pairs and
+                     three-word context (repeatable), e.g. Common Voice (CC0).
+                     Any that match a held-out Tatoeba sentence are skipped, so
+                     the benchmark never sees its own test data.
   --names FILE       Names and places (tools/dictgen/fetch_names.py, from
                      Wikidata, CC0): label, kind, rank. Added with their
                      capitals, without displacing common lowercase words.
@@ -284,6 +289,30 @@ def tatoeba_sentences(path: Path):
             parts = line.rstrip("\n").split("\t")
             if len(parts) >= 3 and parts[0].isdigit() and int(parts[0]) % TATOEBA_HOLDOUT != 0:
                 yield parts[2]
+
+
+def tatoeba_held_out(path: Path) -> set[str]:
+    """Normalized text of the benchmark's held-out Tatoeba sentences."""
+    opener = bz2.open if path.suffix == ".bz2" else open
+    out = set()
+    with opener(path, "rt", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            parts = line.rstrip("\n").split("\t")
+            if len(parts) >= 3 and parts[0].isdigit() and int(parts[0]) % TATOEBA_HOLDOUT == 0:
+                out.add(sentence_key(parts[2]))
+    return out
+
+
+def sentence_key(text: str) -> str:
+    return " ".join(normalize(text).lower().split())
+
+
+def plain_sentences(path: Path, exclude: set[str]):
+    with open_text(path) as f:
+        for line in f:
+            text = line.strip()
+            if text and sentence_key(text) not in exclude:
+                yield text
 
 
 def chunks_of(sentence: str):
@@ -723,6 +752,7 @@ def main() -> None:
     p.add_argument("--casual", action="append")
     p.add_argument("--block", action="append")
     p.add_argument("--tatoeba")
+    p.add_argument("--sentences", action="append", metavar="NAME|LICENSE|URL|FILE")
     p.add_argument("--names")
     p.add_argument("--variants")
     p.add_argument("--variant-out", action="append", metavar="REGION=PATH")
@@ -757,13 +787,19 @@ def main() -> None:
     context = SentenceCounts(words)
     if args.leipzig:
         context.add(leipzig_sentences(Path(args.leipzig)))
+    held_out: set[str] = set()
     if args.tatoeba:
         context.add(tatoeba_sentences(Path(args.tatoeba)))
+        held_out = tatoeba_held_out(Path(args.tatoeba))
         sources.append({
             "name": "Tatoeba sentences",
             "license": "CC-BY-2.0-FR",
             "url": "https://tatoeba.org",
         })
+    for spec in args.sentences or []:
+        name, license_, url, path = spec.split("|", 3)
+        context.add(plain_sentences(Path(path), held_out))
+        sources.append({"name": name, "license": license_, "url": url})
     if context.tokens:
         print(f"  Sentences: {context.tokens:,} words, {len(context.pairs):,} pairs, "
               f"{len(context.triples):,} triples", file=sys.stderr)

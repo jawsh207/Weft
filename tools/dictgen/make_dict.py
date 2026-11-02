@@ -33,6 +33,22 @@ def fetch(name: str, spec: dict, cache: Path) -> Path | None:
         if spec.get("url") is None and Path(p).exists():
             print(f"[{name}] using {p}")
             return Path(p)
+    if spec.get("urls"):
+        # Several files concatenated into one (e.g. Common Voice's sentence lists).
+        parts = []
+        for u in spec["urls"]:
+            print(f"[{name}] downloading {u}")
+            try:
+                req = urllib.request.Request(u, headers={"User-Agent": "weft-dictgen"})
+                with urllib.request.urlopen(req, timeout=120) as r:
+                    parts.append(r.read().decode("utf-8", "replace").rstrip("\n") + "\n")
+            except Exception as e:  # noqa: BLE001 - one missing file shouldn't sink the source
+                print(f"[{name}] FAILED: {e}")
+        if not parts:
+            return None
+        dest.write_text("".join(parts), encoding="utf-8")
+        print(f"[{name}] saved {dest.stat().st_size / 1e6:.1f} MB from {len(parts)} files")
+        return dest
     url = spec.get("url")
     if not url:
         print(f"[{name}] not downloadable: {spec.get('manual', 'add it manually')}")
@@ -87,6 +103,8 @@ def main() -> None:
         cmd += ["--allow", str(paths["allow"])]
     if paths.get("tatoeba"):
         cmd += ["--tatoeba", str(paths["tatoeba"])]
+    if paths.get("commonvoice"):
+        cmd += ["--sentences", f"Common Voice sentences|CC0-1.0|https://commonvoice.mozilla.org|{paths['commonvoice']}"]
     names = HERE / "sources" / config.get("names", f"{locale}.names.tsv")
     if names.exists():
         cmd += ["--names", str(names)]

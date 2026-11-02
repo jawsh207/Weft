@@ -37,6 +37,33 @@
       "file": "eng_sentences.tsv.bz2",
       "license": "CC-BY-2.0-FR",
       "optional": true
+    },
+    "commonvoice": {
+      "urls": [
+        "https://raw.githubusercontent.com/common-voice/common-voice/b24381ce7136f2524a1128cb605b49111f79dbea/server/data/en/DNGros.txt",
+        "https://raw.githubusercontent.com/common-voice/common-voice/b24381ce7136f2524a1128cb605b49111f79dbea/server/data/en/DictionaryofForeignPhrases.txt",
+        "https://raw.githubusercontent.com/common-voice/common-voice/b24381ce7136f2524a1128cb605b49111f79dbea/server/data/en/RLarissa.txt",
+        "https://raw.githubusercontent.com/common-voice/common-voice/b24381ce7136f2524a1128cb605b49111f79dbea/server/data/en/activate.txt",
+        "https://raw.githubusercontent.com/common-voice/common-voice/b24381ce7136f2524a1128cb605b49111f79dbea/server/data/en/ajaydee.txt",
+        "https://raw.githubusercontent.com/common-voice/common-voice/b24381ce7136f2524a1128cb605b49111f79dbea/server/data/en/bavencope.txt",
+        "https://raw.githubusercontent.com/common-voice/common-voice/b24381ce7136f2524a1128cb605b49111f79dbea/server/data/en/elleo.txt",
+        "https://raw.githubusercontent.com/common-voice/common-voice/b24381ce7136f2524a1128cb605b49111f79dbea/server/data/en/est31.txt",
+        "https://raw.githubusercontent.com/common-voice/common-voice/b24381ce7136f2524a1128cb605b49111f79dbea/server/data/en/harvsents.txt",
+        "https://raw.githubusercontent.com/common-voice/common-voice/b24381ce7136f2524a1128cb605b49111f79dbea/server/data/en/james_fortune.txt",
+        "https://raw.githubusercontent.com/common-voice/common-voice/b24381ce7136f2524a1128cb605b49111f79dbea/server/data/en/jf99.txt",
+        "https://raw.githubusercontent.com/common-voice/common-voice/b24381ce7136f2524a1128cb605b49111f79dbea/server/data/en/kieran_drew.txt",
+        "https://raw.githubusercontent.com/common-voice/common-voice/b24381ce7136f2524a1128cb605b49111f79dbea/server/data/en/mlennox.txt",
+        "https://raw.githubusercontent.com/common-voice/common-voice/b24381ce7136f2524a1128cb605b49111f79dbea/server/data/en/pro.gadget.txt",
+        "https://raw.githubusercontent.com/common-voice/common-voice/b24381ce7136f2524a1128cb605b49111f79dbea/server/data/en/reinhart1010.txt",
+        "https://raw.githubusercontent.com/common-voice/common-voice/b24381ce7136f2524a1128cb605b49111f79dbea/server/data/en/sentence-collector.txt",
+        "https://raw.githubusercontent.com/common-voice/common-voice/b24381ce7136f2524a1128cb605b49111f79dbea/server/data/en/thehowl.txt",
+        "https://raw.githubusercontent.com/common-voice/common-voice/b24381ce7136f2524a1128cb605b49111f79dbea/server/data/en/tlcoles.txt",
+        "https://raw.githubusercontent.com/common-voice/common-voice/b24381ce7136f2524a1128cb605b49111f79dbea/server/data/en/tww.id.au.proverbs.txt"
+      ],
+      "file": "commonvoice_en.txt",
+      "license": "CC0-1.0",
+      "note": "Hand-written and submitted sentences only; the Wikipedia extracts (wiki.en*.txt) are left out because they're encyclopedic, not conversational. Pinned to a commit for reproducible builds.",
+      "optional": true
     }
   },
   "names": "en.names.tsv",

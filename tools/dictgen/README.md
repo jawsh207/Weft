@@ -31,6 +31,7 @@ python3 tools/dictgen/make_dict.py en_US --max-words 120000 --casual-weight 0.5
 | SCOWL (or a Hunspell `.dic`) | Allow list that filters junk from subtitle-only words | MIT-like |
 | `sources/en_US.casual.txt` | Texting words spell-check lists omit ("lol", "idk", lowercase "ok") | part of this repo |
 | Tatoeba sentences | Everyday sentences for word pairs and three-word context (every 50th sentence is held out for the benchmark) | CC BY 2.0 FR |
+| Mozilla Common Voice sentences (hand-written ones; the Wikipedia extracts are left out as too formal) | More everyday sentences for word pairs and three-word context; any matching a held-out benchmark sentence are skipped | CC0 |
 | Leipzig sentences (same archive) | Three-word context from news text | CC BY 4.0 |
 | Wikidata and GeoNames (`sources/en.names.tsv`, from `fetch_names.py`) | Names, countries, demonyms, regions, brands (Wikidata); cities (GeoNames) | CC0; CC BY 4.0 |
 | ESDB, formerly SCOWL (`sources/en_variants.tsv`, from `make_variants.py`) | US → UK / Canadian / Australian spellings | MIT-like, see `sources/LICENSE-ESDB.txt` |
@@ -106,6 +107,7 @@ python3 tools/dictgen/build_dict.py --locale en_US \
   --leipzig tools/dictgen/testdata/leipzig \
   --casual tools/dictgen/testdata/casual.txt \
   --tatoeba tools/dictgen/testdata/tatoeba.tsv \
+  --sentences "Common Voice sentences|CC0-1.0|https://commonvoice.mozilla.org|tools/dictgen/testdata/commonvoice.txt" \
   --names tools/dictgen/testdata/names.tsv \
   --variants tools/dictgen/sources/en_variants.tsv \
   --variant-out GB=app/src/test/resources/fixture_en_GB.ekd.gz \
