@@ -127,6 +127,21 @@ class Suggester(
                 // A capitalized word mid-sentence is almost always a name: only fix its case or accents.
                 previous != null && isCapitalized(typed) ->
                     pickAutocorrect(t.size, ranked.filter { it.kind == SuggestionKind.Exact })
+                // Capitalized at the start of a sentence: maybe a name, maybe auto-capitals. Fix it
+                // into an ordinary word ("Thw" → "The") or, carefully, a well-known name
+                // ("Carribean" → "Caribbean"), never into some other name ("Yanni" → "Yanji").
+                isCapitalized(typed) ->
+                    pickAutocorrect(
+                        t.size,
+                        ranked.filter {
+                            it.kind == SuggestionKind.Exact || !isNameOnly(it.word) ||
+                                // Into a name only if it's well known, a fix rather than a guess at a
+                                // longer name, and starts the same way: misspellings rarely change the
+                                // first letter ("Carribean" → "Caribbean"), other names do ("Ziri", "Siri").
+                                !isObscureName(it.word) && it.kind != SuggestionKind.Completion &&
+                                it.word[0].equals(typed[0], ignoreCase = true)
+                        },
+                    )
                 // ALL CAPS may be an acronym ("SIM", "NASA"): never complete it into a longer word
                 // (typos still get fixed, for caps-lock typing: "THW" → "THE").
                 isAcronym(typed) -> pickAutocorrect(t.size, ranked.filter { it.kind != SuggestionKind.Completion })
@@ -155,6 +170,18 @@ class Suggester(
     }
 
     private fun isAcronym(typed: String) = typed.length >= 2 && typed.none { it.isLowerCase() }
+
+    /** A word the dictionary only has capitalized ("Seattle", "Samir"), not an everyday word. */
+    private fun isNameOnly(word: String): Boolean {
+        val dict = dictionary ?: return false
+        return ' ' !in word && dict.find(word.lowercase()) < 0 && dict.findIgnoreCase(word) >= 0
+    }
+
+    /** A name-only word that isn't well known ("Yanji", not "Seattle"). */
+    private fun isObscureName(word: String): Boolean {
+        val dict = dictionary ?: return false
+        return isNameOnly(word) && dict.freq(dict.findIgnoreCase(word)) < WELL_KNOWN_NAME
+    }
 
     private fun isCapitalized(word: String) =
         word.length >= 2 && word[0].isUpperCase() && word.drop(1).none { it.isUpperCase() }
@@ -487,6 +514,9 @@ class Suggester(
         const val CLEAR_MIN_LENGTH = 5
         const val CLEAR_MARGIN = 1.5f
         const val CLEAR_MIN_SCORE = -4f
+
+        /** Names at least this common can be the fix for a capitalized typo. */
+        const val WELL_KNOWN_NAME = 120
         const val MIN_SPLIT_FREQ = 100
 
         /** How much more frequent (log scale, 13 ≈ 2×) a contraction must be to replace a real word. */
