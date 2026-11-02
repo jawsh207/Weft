@@ -294,6 +294,17 @@ def chunks_of(sentence: str):
             yield tokens
 
 
+def names_sources(path: Path) -> list[dict]:
+    """The "# source<TAB>name<TAB>license<TAB>url" lines of a names file, for attribution."""
+    out = []
+    with open_text(path) as f:
+        for line in f:
+            parts = line.rstrip("\n").split("\t")
+            if parts[0] == "# source" and len(parts) == 4:
+                out.append({"name": parts[1], "license": parts[2], "url": parts[3]})
+    return out
+
+
 def read_names(path: Path) -> list[tuple[str, str, int]]:
     """label, kind, rank (1 = most notable within its kind)."""
     out = []
@@ -453,11 +464,11 @@ def merge(args) -> tuple[dict[str, Entry], list[dict], dict]:
 
     if args.names:
         add_names(read_names(Path(args.names)), entries, resolver, args)
-        sources.append({
+        sources += names_sources(Path(args.names)) or [{
             "name": "Wikidata (names and places)",
             "license": "CC0-1.0",
             "url": "https://www.wikidata.org",
-        })
+        }]
 
     if allow:
         sources.append({"name": "Allow list(s): " + ", ".join(Path(a).name for a in args.allow),

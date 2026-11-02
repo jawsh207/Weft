@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
-Fetch names and places from Wikidata (CC0) into sources/en.names.tsv, which
-build_dict.py adds to the English dictionaries with their capitals.
+Fetch names and places into sources/en.names.tsv, which build_dict.py adds to
+the English dictionaries with their capitals: people's names, countries,
+demonyms, regions and brands from Wikidata (CC0), and cities from GeoNames
+(CC BY 4.0).
 
     python3 tools/dictgen/fetch_names.py
 
@@ -12,9 +14,11 @@ Columns: label, kind, rank (1 = most notable within its kind).
 
 from __future__ import annotations
 
+import io
 import json
 import sys
 import time
+import zipfile
 import unicodedata
 import urllib.parse
 import urllib.request
@@ -49,7 +53,12 @@ SELECT ?label ?n WHERE {{
 
 QUERIES = {
     # Given names (male, female, unisex) and family names.
-    "given": ranked("wd:Q202444 wd:Q12308941 wd:Q11879590 wd:Q3409032", 8000, min_links=2),
+    # One query per kind of given name keeps each well inside the time limit.
+    "given": [
+        ranked("wd:Q12308941", 4000, min_links=3),   # male given names
+        ranked("wd:Q11879590", 4000, min_links=3),   # female given names
+        ranked("wd:Q3409032 wd:Q202444", 2000, min_links=3),  # unisex, plain "given name"
+    ],
     "family": ranked("wd:Q101352", 6000, min_links=8),
     # Countries and their demonyms ("France", "French").
     "country": ranked("wd:Q6256 wd:Q3624078", 400),
@@ -65,13 +74,6 @@ SELECT DISTINCT ?label ?n WHERE {
         "wd:Q180673 wd:Q5107 wd:Q107390",
         800,
     ),
-    # Cities and towns over 50,000 people.
-    "place": ranked(
-        "wd:Q515 wd:Q1549591 wd:Q1637706 wd:Q200250 wd:Q5119 wd:Q1093829 wd:Q3957 "
-        "wd:Q7930989 wd:Q747074",
-        6000,
-        "?item wdt:P1082 ?pop . FILTER(?pop >= 50000)",
-    ),
     # Companies, websites, apps and brands.
     "org": ranked(
         "wd:Q4830453 wd:Q891723 wd:Q6881511 wd:Q35127 wd:Q620615 wd:Q167270 wd:Q431289",
@@ -84,6 +86,36 @@ SELECT DISTINCT ?label ?n WHERE {
 BUDGET_SECONDS = 20 * 60  # stop starting new queries after this
 
 
+GEONAMES = "https://download.geonames.org/export/dump/cities15000.zip"
+MIN_POPULATION = 50_000
+
+
+def geonames_cities() -> list[tuple[str, int]] | None:
+    """Cities over MIN_POPULATION from GeoNames, by population (CC BY 4.0)."""
+    req = urllib.request.Request(GEONAMES, headers={"User-Agent": AGENT})
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            data = r.read()
+    except Exception as e:  # noqa: BLE001
+        warn(f"GeoNames download failed: {e}")
+        return None
+    out = []
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        with z.open("cities15000.txt") as f:
+            for line in io.TextIOWrapper(f, encoding="utf-8"):
+                cols = line.rstrip("\n").split("\t")
+                if len(cols) > 14 and cols[14].isdigit() and int(cols[14]) >= MIN_POPULATION:
+                    out.append((cols[1], int(cols[14])))
+    out.sort(key=lambda x: -x[1])
+    return out
+
+
+def warn(message: str) -> None:
+    """Shows on the GitHub Actions run page (raw logs aren't always at hand)."""
+    print(f"::warning title=fetch_names::{message}")
+    print(message, file=sys.stderr)
+
+
 def query(sparql: str) -> list[tuple[str, int]] | None:
     """Results, or None if the endpoint failed (the server gives up after 60 s)."""
     url = ENDPOINT + "?" + urllib.parse.urlencode({"query": sparql, "format": "json"})
@@ -94,7 +126,7 @@ def query(sparql: str) -> list[tuple[str, int]] | None:
                 data = json.load(r)
             return [(b["label"]["value"], int(b["n"]["value"])) for b in data["results"]["bindings"]]
         except Exception as e:  # noqa: BLE001 - retry once, then report
-            print(f"  attempt {attempt + 1} failed: {e}", file=sys.stderr)
+            warn(f"attempt {attempt + 1} failed: {e}")
             time.sleep(15)
     return None
 
@@ -128,11 +160,22 @@ def main() -> None:
     old = previous_rows()
     rows = []
     start = time.monotonic()
-    for kind, sparql in QUERIES.items():
+    kinds = dict(QUERIES, place="geonames")
+    for kind, sparql in kinds.items():
         results = None
         if time.monotonic() - start < BUDGET_SECONDS:
+            t = time.monotonic()
             print(f"[{kind}] querying…", file=sys.stderr)
-            results = query(sparql)
+            if sparql == "geonames":
+                results = geonames_cities()
+            elif isinstance(sparql, list):
+                parts = [query(q) for q in sparql]
+                ok = [p for p in parts if p is not None]
+                results = sorted((x for p in ok for x in p), key=lambda x: -x[1]) if ok else None
+            else:
+                results = query(sparql)
+            print(f"::notice title=fetch_names::{kind}: {'failed' if results is None else len(results)} "
+                  f"in {time.monotonic() - t:.0f}s")
         if results is None:
             rows += old.get(kind, [])
             print(f"[{kind}] failed or out of time; kept {len(old.get(kind, [])):,} from before", file=sys.stderr)
@@ -151,7 +194,9 @@ def main() -> None:
     if not rows:
         sys.exit("No names fetched; nothing written.")
     with open(OUT, "w", encoding="utf-8") as f:
-        f.write("# label\tkind\trank  (from Wikidata, CC0; generated by fetch_names.py)\n")
+        f.write("# label\tkind\trank  (generated by fetch_names.py)\n")
+        f.write("# source\tWikidata (names, countries, regions, brands)\tCC0-1.0\thttps://www.wikidata.org\n")
+        f.write("# source\tGeoNames (cities)\tCC-BY-4.0\thttps://www.geonames.org\n")
         for label, kind, rank in rows:
             f.write(f"{label}\t{kind}\t{rank}\n")
     print(f"Wrote {OUT}: {len(rows):,} names", file=sys.stderr)

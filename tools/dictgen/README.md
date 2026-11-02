@@ -32,7 +32,7 @@ python3 tools/dictgen/make_dict.py en_US --max-words 120000 --casual-weight 0.5
 | `sources/en_US.casual.txt` | Texting words spell-check lists omit ("lol", "idk", lowercase "ok") | part of this repo |
 | Tatoeba sentences | Everyday sentences for word pairs and three-word context (every 50th sentence is held out for the benchmark) | CC BY 2.0 FR |
 | Leipzig sentences (same archive) | Three-word context from news text | CC BY 4.0 |
-| Wikidata (`sources/en.names.tsv`, from `fetch_names.py`) | Names, places, countries, demonyms, brands | CC0 |
+| Wikidata and GeoNames (`sources/en.names.tsv`, from `fetch_names.py`) | Names, countries, demonyms, regions, brands (Wikidata); cities (GeoNames) | CC0; CC BY 4.0 |
 | ESDB, formerly SCOWL (`sources/en_variants.tsv`, from `make_variants.py`) | US → UK / Canadian / Australian spellings | MIT-like, see `sources/LICENSE-ESDB.txt` |
 
 All are compatible with the app's GPL-3.0 license. The CC BY / CC BY-SA sources
