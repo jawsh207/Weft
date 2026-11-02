@@ -502,7 +502,9 @@ def add_names(names: list[tuple[str, str, int]], entries: dict[str, Entry], reso
         parts = label.split(" ")
         if len(parts) > 2 or not all(is_valid_word(p) for p in parts):
             continue
-        freq = round(170 - 90 * math.sqrt((rank - 1) / max(1, by_kind[kind] - 1)))
+        # Notability rank → frequency: the best known rank like everyday words,
+        # the long tail like rare ones, so obscure names can't win corrections.
+        freq = round(NAME_TOP - (NAME_TOP - NAME_TAIL) * math.sqrt((rank - 1) / max(1, by_kind[kind] - 1)))
         for i, word in enumerate(parts):
             if not word[0].isupper():
                 break
@@ -516,9 +518,18 @@ def add_names(names: list[tuple[str, str, int]], entries: dict[str, Entry], reso
                 if any(x in common for x in edits1(word.lower())):
                     skipped += 1
                     continue
+                # New names must be plain letters on an English keyboard: "Kálmán"
+                # would otherwise turn a typed "Kalman" into it.
+                if not word.isascii():
+                    skipped += 1
+                    continue
                 e = resolver.add(word)
                 added += 1
             else:
+                # Already known ("Rose"): never lift it above its lowercase twin ("rose").
+                low = entries.get(word.lower()) if word != word.lower() else None
+                if low is not None:
+                    f = min(f, final_frequency(low, args.casual_weight) - 13)
                 boosted += 1
             e.name = max(e.name or 0, f)
         if len(parts) == 2 and kind in NAME_KINDS_WITH_PAIRS and parts[0] in entries and parts[1] in entries:
@@ -528,7 +539,9 @@ def add_names(names: list[tuple[str, str, int]], entries: dict[str, Entry], reso
 
 
 NAME_COMMON_WORD = 100
-NAME_NEAR_COMMON = 170
+NAME_NEAR_COMMON = 150
+NAME_TOP = 160
+NAME_TAIL = 50
 LETTERS = "abcdefghijklmnopqrstuvwxyz'"
 
 

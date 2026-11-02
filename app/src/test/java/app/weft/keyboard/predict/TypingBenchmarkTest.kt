@@ -62,8 +62,9 @@ class TypingBenchmarkTest {
         // words it doesn't know (mostly names), which a bold autocorrect would mangle.
         var words = 0
         var changed = 0
-        var unknown = 0
-        var unknownChanged = 0
+        // Distinct unknown words: Tatoeba repeats a few made-up names hundreds of times.
+        val unknown = HashSet<String>()
+        val unknownChanged = HashSet<String>()
         for (sentence in sentences(data)) {
             for (chunk in chunks(sentence)) {
                 var previous: String? = null
@@ -73,15 +74,15 @@ class TypingBenchmarkTest {
                         words++
                         if (auto != null) changed++
                     } else {
-                        unknown++
-                        if (auto != null) unknownChanged++
+                        unknown += w
+                        if (auto != null) unknownChanged += w
                     }
                     previous = w
                 }
             }
         }
         report("false corrections %.2f%% of %d real words".format(pct(changed, words), words))
-        report("unknown words changed %.1f%% of %d".format(pct(unknownChanged, unknown), unknown))
+        report("unknown words changed %.1f%% of %d distinct".format(pct(unknownChanged.size, unknown.size), unknown.size))
         assertTrue("autocorrect fixes too few misspellings", pct(fixed, pairs.size) >= MIN_FIXED)
         assertTrue("autocorrect changes too many real words", pct(changed, words) <= MAX_FALSE)
     }
@@ -144,8 +145,9 @@ class TypingBenchmarkTest {
         const val KSR_EVERY = 2
 
         // Floors, set a little below the last measured results.
-        const val MIN_FIXED = 0.0
-        const val MAX_FALSE = 100.0
-        const val MIN_NEXT_WORD = 0.0
+        // Before the benchmark existed (Oct 2026): fixed 35.9%, next word 22.3%, keystrokes saved 39.8%.
+        const val MIN_FIXED = 65.0
+        const val MAX_FALSE = 0.5
+        const val MIN_NEXT_WORD = 33.0
     }
 }

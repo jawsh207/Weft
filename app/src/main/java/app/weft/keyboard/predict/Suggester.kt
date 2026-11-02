@@ -124,9 +124,14 @@ class Suggester(
             typedIsKnown = typedIsKnown,
             autocorrect = when {
                 typedIsKnown -> contractionFor(typed, ranked)
-                // ALL CAPS is usually an acronym ("SIM", "NASA"): never complete it into a longer word.
+                // A capitalized word mid-sentence is almost always a name: only fix its case or accents.
+                previous != null && isCapitalized(typed) ->
+                    pickAutocorrect(t.size, ranked.filter { it.kind == SuggestionKind.Exact })
+                // ALL CAPS may be an acronym ("SIM", "NASA"): never complete it into a longer word
+                // (typos still get fixed, for caps-lock typing: "THW" → "THE").
                 isAcronym(typed) -> pickAutocorrect(t.size, ranked.filter { it.kind != SuggestionKind.Completion })
-                else -> pickAutocorrect(t.size, ranked)
+                // Completing into a name ("Sami" → "Samir") guesses too much.
+                else -> pickAutocorrect(t.size, ranked.filter { it.kind != SuggestionKind.Completion || !isCapitalized(it.word) })
             },
         )
     }
@@ -151,6 +156,9 @@ class Suggester(
 
     private fun isAcronym(typed: String) = typed.length >= 2 && typed.none { it.isLowerCase() }
 
+    private fun isCapitalized(word: String) =
+        word.length >= 2 && word[0].isUpperCase() && word.drop(1).none { it.isUpperCase() }
+
     /** Is [word] a real word as typed (allowing sentence-start capitals or all caps)? */
     fun isKnown(word: String): Boolean {
         val dict = dictionary
@@ -161,6 +169,13 @@ class Suggester(
             if (lower != word && capitalizedOrCaps && dict.find(lower) >= 0) return true
         }
         return learned.isKnown(word)
+    }
+
+    /** The node of a word's first letter (its ancestor just below the root). */
+    private fun firstLetterNode(dict: BinaryDictionary, node: Int): Int {
+        var n = node
+        while (dict.parent(n) > 0) n = dict.parent(n)
+        return n
     }
 
     // --- Next-word predictions ---------------------------------------------------------------
@@ -291,7 +306,10 @@ class Suggester(
             val single = to - from == 1
             if (single && text.lowercase() != "a" && text.lowercase() != "i") return -1
             val node = dict.findIgnoreCase(text)
-            return if (node < 0 || dict.isOffensive(node) || dict.freq(node) < MIN_SPLIT_FREQ) -1 else node
+            if (node < 0 || dict.isOffensive(node) || dict.freq(node) < MIN_SPLIT_FREQ) return -1
+            // Names don't make good split parts ("abudance" isn't "Abu dance"); "I" is fine.
+            if (dict.char(firstLetterNode(dict, node)).let { Character.isUpperCase(it) } && text.lowercase() != "i") return -1
+            return node
         }
 
         fun suggestion(nodes: List<Int>): Suggestion {
