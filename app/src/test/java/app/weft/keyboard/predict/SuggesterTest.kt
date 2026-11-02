@@ -324,4 +324,13 @@ class SuggesterTest {
         assertEquals(dict.nodeCount > 0, gb.nodeCount > 0)
         assertTrue(gb.hasTrigrams)
     }
+
+    @Test
+    fun knowsWordsThatAlwaysKeepTheirCapital() {
+        assertTrue(suggester.keepsCapital("Monday"))
+        assertTrue(suggester.keepsCapital("Priya"))
+        assertFalse(suggester.keepsCapital("The"))
+        assertFalse(suggester.keepsCapital("Keyboard"))
+        assertFalse(suggester.keepsCapital("hello"))
+    }
 }

@@ -171,6 +171,22 @@ class Suggester(
 
     private fun isAcronym(typed: String) = typed.length >= 2 && typed.none { it.isLowerCase() }
 
+    /**
+     * True if [word] is always written with a capital: the dictionary (or the
+     * user's own words) only has it capitalized ("Seattle", "Monday", "Priya").
+     */
+    fun keepsCapital(word: String): Boolean {
+        val lower = word.lowercase()
+        if (lower == word) return false
+        val dict = dictionary
+        if (dict != null) {
+            if (dict.find(lower) >= 0) return false
+            val node = dict.findIgnoreCase(word)
+            if (node >= 0) return dict.word(node).first().isUpperCase()
+        }
+        return learned.candidates().any { it.first.equals(word, ignoreCase = true) && it.first.first().isUpperCase() }
+    }
+
     /** A word the dictionary only has capitalized ("Seattle", "Samir"), not an everyday word. */
     private fun isNameOnly(word: String): Boolean {
         val dict = dictionary ?: return false

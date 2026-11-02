@@ -61,6 +61,7 @@ import app.weft.keyboard.ui.EmojiActions
 import app.weft.keyboard.ui.KeyboardScreen
 import app.weft.keyboard.ui.ToolActions
 import app.weft.keyboard.voice.SystemVoiceInput
+import app.weft.keyboard.voice.VoiceText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -98,6 +99,9 @@ class WeftKeyboardService :
     private lateinit var typing: TypingController
     private var lastShiftTap = 0L
     private var voicePrefix = ""
+
+    /** The text before the cursor when voice input started, for capitals (see VoiceText). */
+    private var voiceBefore: CharSequence? = null
     private var suggestJob: Job? = null
     private var swipeJob: Job? = null
 
@@ -671,6 +675,7 @@ class WeftKeyboardService :
                 typing.onInputStarted()
                 val before = currentInputConnection?.getTextBeforeCursor(1, 0)
                 voicePrefix = if (!before.isNullOrEmpty() && !before.last().isWhitespace()) " " else ""
+                voiceBefore = currentInputConnection?.getTextBeforeCursor(VOICE_CONTEXT, 0)
                 voice.start(preferOffline = Prefs.of(this).voiceOffline())
             }
         }
@@ -683,12 +688,23 @@ class WeftKeyboardService :
         }
 
         override fun onPartial(text: String) {
-            currentInputConnection?.setComposingText(voicePrefix + text, 1)
+            currentInputConnection?.setComposingText(voiceText(text), 1)
         }
 
         override fun onFinal(text: String) {
             val ic = currentInputConnection ?: return
-            if (text.isEmpty()) ic.finishComposingText() else ic.commitText(voicePrefix + text, 1)
+            val out = voiceText(text)
+            if (out.isEmpty()) ic.finishComposingText() else ic.commitText(out, 1)
+        }
+
+        /**
+         * Punctuation only where it was spoken, capitals that fit the cursor's
+         * place in the sentence, and a space before it unless it starts with a mark.
+         */
+        private fun voiceText(raw: String): String {
+            val formatted = VoiceText.format(raw, voiceBefore) { typing.suggester?.keepsCapital(it) == true }
+            if (formatted.isEmpty()) return ""
+            return if (VoiceText.attachesToPrevious(formatted)) formatted else voicePrefix + formatted
         }
 
         override fun onError(error: Int) {
@@ -705,6 +721,7 @@ class WeftKeyboardService :
     private companion object {
         const val DOUBLE_TAP_MS = 300L
         const val GRAPHEME_LOOKBACK = 64
+        const val VOICE_CONTEXT = 64
         const val EMOJI_ASSET = "emoji/emoji.txt"
         const val EMOJI_RECENTS = "emoji_recents"
         const val EMOJI_TONES = "emoji_tones"

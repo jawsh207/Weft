@@ -28,7 +28,10 @@ Released and working:
 - Grapheme-aware backspace with hold-to-repeat (deletes 👨‍👩‍👧 or 🇨🇦 in one press)
 - Expressive press motion: keys squish and round out on a spring
 - Haptics on every key press, at the strength you choose
-- Voice input through the system speech engine, with live partial results
+- Voice input through the system speech engine, with live partial results.
+  Punctuation goes in only when you say it ("period", "comma", "question mark",
+  "exclamation point", "colon", "semicolon", "new line"), and the first word is
+  capitalized only at the start of a sentence (names, "I" and days keep theirs)
 - **Emoji picker** with every Unicode emoji, drawn in the phone's own emoji font:
   category tabs, recently used, skin tones on long-press (remembered per
   emoji), and search by name, keyword or shortcode ("joy", "lol", ":thumbsup:",
