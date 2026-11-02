@@ -461,7 +461,7 @@ private fun SwitchRow(
 private fun DictionaryInfo() {
     val context = LocalContext.current
     // The dictionary for the keyboard language in use (US English if Weft isn't the current keyboard).
-    val meta by produceState<JSONObject?>(null) {
+    val metaState = produceState<JSONObject?>(null) {
         value = withContext(Dispatchers.IO) {
             val imm = context.getSystemService(InputMethodManager::class.java)
             val tag = imm?.currentInputMethodSubtype?.languageTag?.takeIf {
@@ -471,6 +471,7 @@ private fun DictionaryInfo() {
             runCatching { JSONObject(DictionaryLoader.load(context, locale)!!.meta) }.getOrNull()
         }
     }
+    val meta = metaState.value
     SectionCard(stringResource(R.string.settings_dictionary_title)) {
         Column(
             Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
