@@ -676,9 +676,18 @@ class WeftKeyboardService :
                 val before = currentInputConnection?.getTextBeforeCursor(1, 0)
                 voicePrefix = if (!before.isNullOrEmpty() && !before.last().isWhitespace()) " " else ""
                 voiceBefore = currentInputConnection?.getTextBeforeCursor(VOICE_CONTEXT, 0)
-                voice.start(preferOffline = Prefs.of(this).voiceOffline())
+                voice.start(preferOffline = Prefs.of(this).voiceOffline(), search = isSearchField())
             }
         }
+    }
+
+    /** Search boxes and address bars, where a voice query is a search. */
+    private fun isSearchField(): Boolean {
+        val info = currentInputEditorInfo ?: return false
+        val variation = info.inputType and InputType.TYPE_MASK_VARIATION
+        return state.enterAction == EditorInfo.IME_ACTION_SEARCH ||
+            variation == InputType.TYPE_TEXT_VARIATION_URI ||
+            variation == InputType.TYPE_TEXT_VARIATION_FILTER
     }
 
     private val voiceListener = object : SystemVoiceInput.Listener {

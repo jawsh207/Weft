@@ -9,6 +9,9 @@ package app.weft.keyboard.voice
  *    "question mark", "comma", … types the mark instead. The word stays a word
  *    after "the", "a", "my", … ("the period of time"), and saying it twice
  *    types it once as a word ("period period" → "period").
+ *  - **Works with plain engines too.** If an engine returns lowercase text with
+ *    no punctuation, words that are always capitalized ("i", "seattle", "monday")
+ *    get their capitals, and sentence starts are capitalized as below.
  *  - **Capitals that fit where the cursor is.** At the start of a sentence the
  *    first word is capitalized; in the middle of one it's lowercased, unless it's
  *    a word that's always capitalized ("I", names, places, days). A new phrase
@@ -101,6 +104,9 @@ object VoiceText {
                 // Mid-sentence: lowercase the engine's phrase-start capital unless the word keeps it.
                 word.first().isUpperCase() && (firstWord || enginePhraseStart(tokens, i)) && !keeps(word, keepsCapital) ->
                     word.replaceFirstChar { it.lowercase() }
+                // Engines that return plain lowercase text: "i", "seattle", "monday" get their capitals.
+                word.first().isLowerCase() && keeps(word.replaceFirstChar { it.titlecase() }, keepsCapital) ->
+                    word.replaceFirstChar { it.titlecase() }
                 else -> word
             }
             appendWord(out, word)
@@ -127,7 +133,7 @@ object VoiceText {
         val bare = word.replace(EDGE_PUNCTUATION, "")
         if (bare.isEmpty()) return true
         if (bare == "I" || bare.startsWith("I'") || bare.startsWith("I’")) return true
-        if (bare.length >= 2 && bare.none { it.isLowerCase() }) return true // NASA, OK
+        if (bare.length >= 2 && bare.none { it.isLowerCase() } && bare.any { it.isLetter() }) return true // NASA, OK
         return keepsCapital(bare)
     }
 

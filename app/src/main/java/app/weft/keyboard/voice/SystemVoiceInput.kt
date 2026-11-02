@@ -43,8 +43,15 @@ class SystemVoiceInput(
      * @param preferOffline ask the user's chosen engine to recognize on the phone
      *   (RecognizerIntent.EXTRA_PREFER_OFFLINE). It's a request: engines without
      *   offline support ignore it. Weft never switches to a different engine.
+     * @param search the field is a search box: ask for search-style recognition,
+     *   which engines may tune for short queries.
+     *
+     * Weft doesn't ask for formatting (EXTRA_ENABLE_FORMATTING): it adds
+     * punctuation and capitals itself (VoiceText), so plain text is ideal and
+     * engines that format anyway work too. It does ask engines not to show a
+     * trailing period in live results, so the preview doesn't flicker.
      */
-    fun start(preferOffline: Boolean = false) {
+    fun start(preferOffline: Boolean = false, search: Boolean = false) {
         stop()
         val r = SpeechRecognizer.createSpeechRecognizer(context)
         r.setRecognitionListener(callbacks)
@@ -53,8 +60,9 @@ class SystemVoiceInput(
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
             .putExtra(
                 RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
+                if (search) RecognizerIntent.LANGUAGE_MODEL_WEB_SEARCH else RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
             )
+            .putExtra(RecognizerIntent.EXTRA_HIDE_PARTIAL_TRAILING_PUNCTUATION, true)
             .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             .putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
             .putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, preferOffline)

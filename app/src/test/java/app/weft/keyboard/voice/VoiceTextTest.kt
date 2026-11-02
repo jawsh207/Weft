@@ -91,4 +91,14 @@ class VoiceTextTest {
         assertEquals("", f(""))
         assertEquals("", f("   "))
     }
+
+    @Test
+    fun plainEngineOutputGetsItsCapitals() {
+        // Distillery with punctuation off, or engines that return lowercase text.
+        assertEquals("I think Seattle is nice. See you Monday", f("i think seattle is nice period see you monday"))
+        assertEquals("but I'm late", f("but i'm late", before = "Sorry "))
+        assertEquals("I'm late", f("i'm late"))
+        assertEquals("ask Tom", f("ask tom", before = "please "))
+        assertEquals("may I come", f("may i come", before = "so "))
+    }
 }
