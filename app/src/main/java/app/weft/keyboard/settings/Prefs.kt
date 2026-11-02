@@ -18,6 +18,7 @@ object Prefs {
     const val KEY_HEIGHT = "key_height"
     const val NUMBER_ROW = "number_row"
     const val VOICE_OFFLINE = "voice_offline"
+    const val EMOJI_SUGGESTIONS = "emoji_suggestions"
 
     fun of(context: Context): SharedPreferences =
         context.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -32,3 +33,4 @@ fun SharedPreferences.haptics() = HapticLevel.of(getString(Prefs.HAPTICS, null))
 fun SharedPreferences.keyHeight() = KeyHeight.of(getString(Prefs.KEY_HEIGHT, null))
 fun SharedPreferences.numberRow() = getBoolean(Prefs.NUMBER_ROW, false)
 fun SharedPreferences.voiceOffline() = getBoolean(Prefs.VOICE_OFFLINE, false)
+fun SharedPreferences.emojiSuggestions() = getBoolean(Prefs.EMOJI_SUGGESTIONS, true)

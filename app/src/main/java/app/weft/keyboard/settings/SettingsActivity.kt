@@ -45,6 +45,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -296,6 +299,7 @@ private fun TypingSettings() {
     var autocorrect by remember { mutableStateOf(prefs.getBoolean(Prefs.AUTOCORRECT, true)) }
     var learn by remember { mutableStateOf(prefs.getBoolean(Prefs.LEARN_WORDS, true)) }
     var swipe by remember { mutableStateOf(prefs.getBoolean(Prefs.SWIPE, true)) }
+    var emoji by remember { mutableStateOf(prefs.emojiSuggestions()) }
     val learnedFile = remember { File(context.filesDir, LearnedWords.WORDS_FILE) }
     val historyFile = remember { File(context.filesDir, LearnedWords.HISTORY_FILE) }
     var learnedCount by remember { mutableIntStateOf(countLines(learnedFile)) }
@@ -309,6 +313,10 @@ private fun TypingSettings() {
         SwitchRow(stringResource(R.string.settings_autocorrect), stringResource(R.string.settings_autocorrect_body), autocorrect, enabled = suggestions) {
             autocorrect = it
             prefs.edit { putBoolean(Prefs.AUTOCORRECT, it) }
+        }
+        SwitchRow(stringResource(R.string.settings_emoji_suggestions), stringResource(R.string.settings_emoji_suggestions_body), emoji, enabled = suggestions) {
+            emoji = it
+            prefs.edit { putBoolean(Prefs.EMOJI_SUGGESTIONS, it) }
         }
         SwitchRow(stringResource(R.string.settings_swipe), stringResource(R.string.settings_swipe_body), swipe) {
             swipe = it
@@ -452,8 +460,16 @@ private fun SwitchRow(
 @Composable
 private fun DictionaryInfo() {
     val context = LocalContext.current
-    val meta = remember {
-        runCatching { JSONObject(DictionaryLoader.load(context, "en_US")!!.meta) }.getOrNull()
+    // The dictionary for the keyboard language in use (US English if Weft isn't the current keyboard).
+    val meta by produceState<JSONObject?>(null) {
+        value = withContext(Dispatchers.IO) {
+            val imm = context.getSystemService(InputMethodManager::class.java)
+            val tag = imm?.currentInputMethodSubtype?.languageTag?.takeIf {
+                it.isNotEmpty() && isWeftCurrent(context)
+            }
+            val locale = tag?.replace('-', '_') ?: "en_US"
+            runCatching { JSONObject(DictionaryLoader.load(context, locale)!!.meta) }.getOrNull()
+        }
     }
     SectionCard(stringResource(R.string.settings_dictionary_title)) {
         Column(
@@ -507,3 +523,8 @@ private fun countLines(file: File, prefix: String = ""): Int =
 
 private fun Context.hasMic(): Boolean =
     checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+
+/** True if Weft is the keyboard currently selected in system settings. */
+private fun isWeftCurrent(context: Context): Boolean =
+    Settings.Secure.getString(context.contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD) ==
+        ComponentName(context, WeftKeyboardService::class.java).flattenToShortString()

@@ -46,6 +46,7 @@ import app.weft.keyboard.predict.SwipeDecoder
 import app.weft.keyboard.predict.TextContext
 import app.weft.keyboard.settings.Prefs
 import app.weft.keyboard.settings.autocorrect
+import app.weft.keyboard.settings.emojiSuggestions
 import app.weft.keyboard.settings.haptics
 import app.weft.keyboard.settings.keyHeight
 import app.weft.keyboard.settings.numberRow
@@ -174,6 +175,12 @@ class WeftKeyboardService :
         }
     }
 
+    /** The emoji [word] names, in the skin tone last chosen for it. */
+    private fun emojiFor(word: String): String? {
+        val e = state.emojiCatalog?.suggestFor(word) ?: return null
+        return state.emojiTones[e.base] ?: e.base
+    }
+
     private fun onEmoji(text: String) {
         state.message = null
         commitKeyText(text)
@@ -216,12 +223,26 @@ class WeftKeyboardService :
     }
 
     private fun loadPrediction() {
-        val locale = currentLocale()
         lifecycleScope.launch {
-            val suggester = withContext(Dispatchers.IO) {
+            withContext(Dispatchers.IO) {
                 learned.load()
                 learnedResetSeen = Prefs.of(this@WeftKeyboardService).learnedReset()
                 learned.setSystemWords(DictionaryLoader.systemUserWords(this@WeftKeyboardService))
+            }
+            loadDictionary(currentLocale())
+        }
+    }
+
+    /** The dictionary for the selected keyboard language (English US, UK, Canada, Australia). */
+    private var dictionaryLocale: String? = null
+    private var dictionaryJob: Job? = null
+
+    private fun loadDictionary(locale: String) {
+        if (locale == dictionaryLocale) return
+        dictionaryLocale = locale
+        dictionaryJob?.cancel()
+        dictionaryJob = lifecycleScope.launch {
+            val suggester = withContext(Dispatchers.IO) {
                 val dict = DictionaryLoader.load(this@WeftKeyboardService, locale)
                 val centers = KeyGeometry.centers(Layouts.qwerty)
                 swipeDecoder = SwipeDecoder(dict, centers, learned)
@@ -231,6 +252,12 @@ class WeftKeyboardService :
             state.swipeEnabled = swipeAllowed && swipeDecoder != null
             refreshSuggestions()
         }
+    }
+
+    override fun onCurrentInputMethodSubtypeChanged(newSubtype: android.view.inputmethod.InputMethodSubtype?) {
+        super.onCurrentInputMethodSubtypeChanged(newSubtype)
+        val tag = newSubtype?.languageTag?.takeIf { it.isNotEmpty() } ?: return
+        if (dictionaryLocale != null) loadDictionary(tag.replace('-', '_'))
     }
 
     private fun currentLocale(): String {
@@ -322,6 +349,7 @@ class WeftKeyboardService :
             TypingPrefs(prefs.showSuggestions(), prefs.autocorrect(), prefs.learnWords(), prefs.swipeTyping()),
         )
         typing.suggestionsEnabled = policy.suggestions
+        typing.emojiFor = if (prefs.emojiSuggestions()) ::emojiFor else null
         typing.autocorrectEnabled = policy.autocorrect
         typing.learningEnabled = policy.learning
         swipeAllowed = policy.swipe
@@ -463,6 +491,7 @@ class WeftKeyboardService :
         state.message = null
         state.pendingRemoval = null
         typing.onPick(editor, chip)
+        if (chip.style == ChipStyle.Emoji) rememberEmoji(chip.text)
         if (state.shift == ShiftState.Once) state.shift = ShiftState.Off
     }
 

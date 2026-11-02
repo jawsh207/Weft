@@ -103,4 +103,15 @@ class EmojiTest {
         h.setPreferred("👋", "👋")
         assertEquals("👋", h.preferred("👋"))
     }
+
+    @Test
+    fun suggestsEmojiOnlyForClearMatches() {
+        val catalog = EmojiCatalog.parse(javaClass.classLoader!!.getResource("emoji_fixture.txt")!!.readText())
+        assertEquals("🍕", catalog.suggestFor("pizza")?.base)
+        assertEquals("🍕", catalog.suggestFor("Pizzas")?.base)
+        assertEquals("😂", catalog.suggestFor("lol")?.base)
+        assertEquals("👍", catalog.suggestFor("thumbsup")?.base)
+        assertEquals(null, catalog.suggestFor("love")) // a keyword, not a name or pick
+        assertEquals(null, catalog.suggestFor("up"))
+    }
 }

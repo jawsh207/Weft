@@ -25,29 +25,35 @@ AGENT = "weft-dictgen/1.0 (https://github.com/jawsh207/Weft; keyboard dictionary
 OUT = Path(__file__).resolve().parent / "sources" / "en.names.tsv"
 
 
-def ranked(types: str, limit: int, extra: str = "") -> str:
-    """Items of any of [types] with an English label, most sitelinks first."""
+def ranked(types: str, limit: int, extra: str = "", min_links: int = 3) -> str:
+    """
+    Items of any of [types] with an English label, most sitelinks first. The
+    sitelinks filter comes before the label join so the public endpoint stays
+    well inside its 60-second limit.
+    """
     return f"""
-SELECT ?label (MAX(?links) AS ?n) WHERE {{
+SELECT DISTINCT ?label ?n WHERE {{
   VALUES ?type {{ {types} }}
-  ?item wdt:P31 ?type ; wikibase:sitelinks ?links ; rdfs:label ?label .
+  ?item wdt:P31 ?type ; wikibase:sitelinks ?n .
+  FILTER(?n >= {min_links})
   {extra}
+  ?item rdfs:label ?label .
   FILTER(LANG(?label) = "en")
-}} GROUP BY ?label ORDER BY DESC(?n) LIMIT {limit}"""
+}} ORDER BY DESC(?n) LIMIT {limit}"""
 
 
 QUERIES = {
     # Given names (male, female, unisex) and family names.
-    "given": ranked("wd:Q202444 wd:Q12308941 wd:Q11879590 wd:Q3409032", 8000),
-    "family": ranked("wd:Q101352", 6000),
+    "given": ranked("wd:Q202444 wd:Q12308941 wd:Q11879590 wd:Q3409032", 8000, min_links=2),
+    "family": ranked("wd:Q101352", 6000, min_links=8),
     # Countries and their demonyms ("France", "French").
     "country": ranked("wd:Q6256 wd:Q3624078", 400),
     "demonym": """
-SELECT ?label (MAX(?links) AS ?n) WHERE {
+SELECT DISTINCT ?label ?n WHERE {
   VALUES ?type { wd:Q6256 wd:Q3624078 }
-  ?item wdt:P31 ?type ; wikibase:sitelinks ?links ; wdt:P1549 ?label .
+  ?item wdt:P31 ?type ; wikibase:sitelinks ?n ; wdt:P1549 ?label .
   FILTER(LANG(?label) = "en")
-} GROUP BY ?label ORDER BY DESC(?n) LIMIT 400""",
+} ORDER BY DESC(?n) LIMIT 400""",
     # States, provinces and regions people type often; continents.
     "region": ranked(
         "wd:Q35657 wd:Q11828004 wd:Q9357527 wd:Q5852411 wd:Q3336843 "
@@ -65,23 +71,39 @@ SELECT ?label (MAX(?links) AS ?n) WHERE {
     "org": ranked(
         "wd:Q4830453 wd:Q891723 wd:Q6881511 wd:Q35127 wd:Q620615 wd:Q167270 wd:Q431289",
         3000,
-        "FILTER(?links >= 25)",
+        min_links=25,
     ),
 }
 
 
-def query(sparql: str) -> list[tuple[str, int]]:
+BUDGET_SECONDS = 20 * 60  # stop starting new queries after this
+
+
+def query(sparql: str) -> list[tuple[str, int]] | None:
+    """Results, or None if the endpoint failed (the server gives up after 60 s)."""
     url = ENDPOINT + "?" + urllib.parse.urlencode({"query": sparql, "format": "json"})
     req = urllib.request.Request(url, headers={"User-Agent": AGENT, "Accept": "application/sparql-results+json"})
-    for attempt in range(3):
+    for attempt in range(2):
         try:
-            with urllib.request.urlopen(req, timeout=180) as r:
+            with urllib.request.urlopen(req, timeout=75) as r:
                 data = json.load(r)
             return [(b["label"]["value"], int(b["n"]["value"])) for b in data["results"]["bindings"]]
-        except Exception as e:  # noqa: BLE001 - retry, then report
+        except Exception as e:  # noqa: BLE001 - retry once, then report
             print(f"  attempt {attempt + 1} failed: {e}", file=sys.stderr)
-            time.sleep(10 * (attempt + 1))
-    return []
+            time.sleep(15)
+    return None
+
+
+def previous_rows() -> dict[str, list[tuple[str, str, int]]]:
+    """The committed file's rows by kind, kept for any kind whose query fails."""
+    out: dict[str, list[tuple[str, str, int]]] = {}
+    if OUT.exists():
+        for line in OUT.read_text(encoding="utf-8").splitlines():
+            parts = line.split("\t")
+            if line.startswith("#") or len(parts) != 3 or not parts[2].isdigit():
+                continue
+            out.setdefault(parts[1], []).append((parts[0], parts[1], int(parts[2])))
+    return out
 
 
 def usable(label: str) -> bool:
@@ -98,10 +120,18 @@ def usable(label: str) -> bool:
 
 
 def main() -> None:
+    old = previous_rows()
     rows = []
+    start = time.monotonic()
     for kind, sparql in QUERIES.items():
-        print(f"[{kind}] querying…", file=sys.stderr)
-        results = query(sparql)
+        results = None
+        if time.monotonic() - start < BUDGET_SECONDS:
+            print(f"[{kind}] querying…", file=sys.stderr)
+            results = query(sparql)
+        if results is None:
+            rows += old.get(kind, [])
+            print(f"[{kind}] failed or out of time; kept {len(old.get(kind, [])):,} from before", file=sys.stderr)
+            continue
         seen = set()
         rank = 0
         for label, _ in results:
@@ -114,7 +144,7 @@ def main() -> None:
         print(f"[{kind}] {rank:,} names", file=sys.stderr)
         time.sleep(2)  # be gentle with the public endpoint
     if not rows:
-        sys.exit("No names fetched; keeping the existing file.")
+        sys.exit("No names fetched; nothing written.")
     with open(OUT, "w", encoding="utf-8") as f:
         f.write("# label\tkind\trank  (from Wikidata, CC0; generated by fetch_names.py)\n")
         for label, kind, rank in rows:

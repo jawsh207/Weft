@@ -247,7 +247,7 @@ private fun TopStrip(
                 state.suggestions.isNotEmpty() -> SuggestionRow(
                     state.suggestions,
                     onSuggestion,
-                    onLongPress = { state.pendingRemoval = it.text },
+                    onLongPress = { if (it.style != ChipStyle.Emoji) state.pendingRemoval = it.text },
                 )
             }
             ToolsOverlay(showTools && state.toolsOpen, state.clipboardHasContent, tools)

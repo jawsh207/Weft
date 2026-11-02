@@ -3,6 +3,9 @@
     <string name="app_name">Weft</string>
     <string name="ime_name">Weft</string>
     <string name="subtype_en_us">English (US)</string>
+    <string name="subtype_en_gb">English (UK)</string>
+    <string name="subtype_en_ca">English (Canada)</string>
+    <string name="subtype_en_au">English (Australia)</string>
 
     <string name="key_shift">Shift</string>
     <string name="key_backspace">Delete</string>
@@ -64,6 +67,8 @@
     <string name="settings_suggestions_body">Word suggestions and next-word predictions above the keys.</string>
     <string name="settings_autocorrect">Autocorrect</string>
     <string name="settings_autocorrect_body">Fix typos when you press space. Press delete right after to undo.</string>
+    <string name="settings_emoji_suggestions">Emoji suggestions</string>
+    <string name="settings_emoji_suggestions_body">Offer an emoji in the strip when a word names one, like 🍕 for “pizza”. Tap it to add it after the word.</string>
     <string name="settings_swipe">Swipe typing</string>
     <string name="settings_swipe_body">Slide across the letters to type a word, lifting between words. Spaces are added for you; delete removes the whole word.</string>
     <string name="settings_learn">Learn from my typing</string>

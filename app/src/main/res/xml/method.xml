@@ -9,4 +9,22 @@
         android:languageTag="en-US"
         android:imeSubtypeMode="keyboard"
         android:isAsciiCapable="true" />
+    <subtype
+        android:label="@string/subtype_en_gb"
+        android:imeSubtypeLocale="en_GB"
+        android:languageTag="en-GB"
+        android:imeSubtypeMode="keyboard"
+        android:isAsciiCapable="true" />
+    <subtype
+        android:label="@string/subtype_en_ca"
+        android:imeSubtypeLocale="en_CA"
+        android:languageTag="en-CA"
+        android:imeSubtypeMode="keyboard"
+        android:isAsciiCapable="true" />
+    <subtype
+        android:label="@string/subtype_en_au"
+        android:imeSubtypeLocale="en_AU"
+        android:languageTag="en-AU"
+        android:imeSubtypeMode="keyboard"
+        android:isAsciiCapable="true" />
 </input-method>

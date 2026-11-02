@@ -1,0 +1,47 @@
+name: Names
+
+# Fetches names and places from Wikidata (CC0) into tools/dictgen/sources/en.names.tsv
+# and commits it; the Dictionary workflow then rebuilds with it. Kept separate so a
+# slow Wikidata endpoint never holds up dictionary builds.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - tools/dictgen/fetch_names.py
+      - .github/workflows/names.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: names
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Fetch names
+        run: python3 tools/dictgen/fetch_names.py
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tools/dictgen/sources/en.names.tsv
+          if git diff --cached --quiet; then
+            echo "Names unchanged."
+          else
+            git commit -m "Update names and places from Wikidata"
+            git pull --rebase -q origin main
+            git push
+          fi

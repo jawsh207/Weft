@@ -6,11 +6,10 @@ name: Dictionary
 
 on:
   workflow_dispatch:
-    inputs:
-      refresh_names:
-        description: Fetch names and places from Wikidata again
-        type: boolean
-        default: false
+  # Rebuild after the Names workflow commits a new list (bot pushes don't trigger workflows).
+  workflow_run:
+    workflows: [Names]
+    types: [completed]
   push:
     branches: [main]
     paths:
@@ -48,11 +47,6 @@ jobs:
           path: tools/dictgen/cache
           key: dictgen-${{ hashFiles('tools/dictgen/sources/*.json') }}
 
-      # Names and places are committed for reproducible builds; fetched when missing or asked.
-      - name: Fetch names from Wikidata
-        if: ${{ inputs.refresh_names || hashFiles('tools/dictgen/sources/en.names.tsv') == '' }}
-        run: python3 tools/dictgen/fetch_names.py
-
       - name: Build dictionaries
         run: |
           # Stamp with the last change to the pipeline so unchanged inputs give identical output.
@@ -66,10 +60,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add app/src/main/assets/dictionaries/ tools/bench/data/ tools/dictgen/sources/en.names.tsv
+          git add app/src/main/assets/dictionaries/ tools/bench/data/
           if git diff --cached --quiet; then
             echo "Dictionary unchanged."
           else
             git commit -m "Update dictionaries and benchmark data"
+            git pull --rebase -q origin main
             git push
           fi

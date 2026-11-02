@@ -292,4 +292,52 @@ class TypingControllerTest {
         controller.onSeparator(editor, " ")
         assertFalse(editor.toString() == "the ")
     }
+
+    // --- Emoji suggestions -----------------------------------------------------------------------
+
+    private fun withEmoji() {
+        controller.emojiFor = { w -> mapOf("hello" to "👋", "keyboard" to "⌨️")[w.lowercase()] }
+    }
+
+    @Test
+    fun offersEmojiForTheWordBeingTyped() {
+        withEmoji()
+        type("hello")
+        val chips = controller.publish(controller.compute(controller.context(editor)))
+        assertEquals(SuggestionChip("👋", ChipStyle.Emoji), chips[2])
+        assertEquals("hello", chips[1]?.text) // space still keeps the word
+        controller.onPick(editor, chips[2]!!)
+        assertEquals("hello 👋 ", editor.toString())
+    }
+
+    @Test
+    fun emojiFollowsTheWordSpaceWouldMake() {
+        withEmoji()
+        type("keyb")
+        val chips = controller.publish(controller.compute(controller.context(editor)))
+        assertEquals("⌨️", chips[2]?.text)
+        controller.onPick(editor, chips[2]!!)
+        assertEquals("keyboard ⌨️ ", editor.toString())
+    }
+
+    @Test
+    fun emojiForTheWordJustFinished() {
+        withEmoji()
+        type("hello")
+        controller.onSeparator(editor, " ")
+        val chips = controller.publish(controller.compute(controller.context(editor)))
+        assertEquals("👋", chips.getOrNull(2)?.text)
+        controller.onPick(editor, chips[2]!!)
+        assertEquals("hello 👋 ", editor.toString())
+    }
+
+    @Test
+    fun noEmojiWithoutAMatchOrWhenOff() {
+        withEmoji()
+        type("the")
+        assertFalse(controller.publish(controller.compute(controller.context(editor))).any { it?.style == ChipStyle.Emoji })
+        controller.emojiFor = null
+        type("hello")
+        assertFalse(controller.publish(controller.compute(controller.context(editor))).any { it?.style == ChipStyle.Emoji })
+    }
 }

@@ -24,6 +24,9 @@ enum class ChipStyle {
 
     /** The literal typed text, so the user can keep it as-is. */
     Verbatim,
+
+    /** An emoji for the word just typed ("pizza" → 🍕); picking it adds it after the word. */
+    Emoji,
 }
 
 data class SuggestionChip(val text: String, val style: ChipStyle = ChipStyle.Normal)
@@ -45,6 +48,10 @@ class TypingController(private val learned: LearnedWords) {
 
     /** False in fields that ask for no personalized learning (e.g. incognito). */
     var learningEnabled = true
+
+    /** The emoji a word names, in the user's skin tone, or null (set by the keyboard; off in settings). */
+    @Volatile
+    var emojiFor: ((String) -> String?)? = null
 
     private data class Correction(
         val original: String,
@@ -79,6 +86,7 @@ class TypingController(private val learned: LearnedWords) {
         autoSpaced = false
         lastResult = null
         finishSwipe()
+        lastWord = null
         phantomSpace = false
     }
 
@@ -107,6 +115,20 @@ class TypingController(private val learned: LearnedWords) {
      */
     fun chips(result: SuggestionResult): List<SuggestionChip?> {
         if (!suggestionsEnabled) return emptyList()
+        val words = wordChips(result)
+        // The word being typed (or what space will make of it), else the one just finished.
+        val named = result.autocorrect?.takeIf { autocorrectEnabled }?.word
+            ?: result.typed.ifEmpty { null } ?: lastWord
+        val emoji = named?.let { emojiFor?.invoke(it) } ?: return words
+        val slots = if (words.isEmpty()) listOf(null, null, null) else words
+        return slots.take(2) + SuggestionChip(emoji, ChipStyle.Emoji)
+    }
+
+    /** The last finished word, for an emoji after it ("I love pizza " → 🍕). */
+    @Volatile
+    private var lastWord: String? = null
+
+    private fun wordChips(result: SuggestionResult): List<SuggestionChip?> {
         val words = result.suggestions.map { it.word }
         val swipe = swiped
         if (swipe != null && result.typed == swipe.word) {
@@ -149,6 +171,7 @@ class TypingController(private val learned: LearnedWords) {
         lastCorrection = null
         autoSpaced = false
         finishSwipe()
+        lastWord = null
         if (phantomSpace) {
             phantomSpace = false
             editor.insert(" $text")
@@ -223,6 +246,7 @@ class TypingController(private val learned: LearnedWords) {
      * Returns true if it did; otherwise the caller deletes normally.
      */
     fun onBackspace(editor: TextEditor): Boolean {
+        lastWord = null
         val c = lastCorrection
         lastCorrection = null
         autoSpaced = false
@@ -252,6 +276,7 @@ class TypingController(private val learned: LearnedWords) {
 
     /** Replaces the word being typed with [chip] and adds a space. */
     fun onPick(editor: TextEditor, chip: SuggestionChip) {
+        if (chip.style == ChipStyle.Emoji) return pickEmoji(editor, chip.text)
         val ctx = context(editor)
         lastCorrection = null
         val swipe = swiped
@@ -281,6 +306,35 @@ class TypingController(private val learned: LearnedWords) {
         }
         // It replaces the word being typed (if any), so it follows the word before that.
         remember(chip.text, ctx.previous)
+    }
+
+    /** Adds [emoji] after the word being typed (finishing it first) or after the last word. */
+    private fun pickEmoji(editor: TextEditor, emoji: String) {
+        val ctx = context(editor)
+        lastCorrection = null
+        val swipe = swiped
+        val word = when {
+            swipe != null && ctx.fragment == swipe.word -> swipe.word
+            ctx.fragment.isEmpty() -> null
+            else -> autocorrectFor(ctx) ?: ctx.fragment
+        }
+        if (word != null && swipe?.word != word) {
+            learn(ctx.fragment)
+            remember(word, ctx.previous)
+        }
+        finishSwipe()
+        phantomSpace = false
+        editor.batch {
+            if (word != null) {
+                editor.deleteBefore(ctx.fragment.length)
+                editor.insert("$word $emoji ")
+            } else {
+                val before = editor.textBeforeCursor(1)?.toString().orEmpty()
+                editor.insert(if (before.isNotEmpty() && !before.last().isWhitespace()) " $emoji " else "$emoji ")
+            }
+        }
+        lastWord = null
+        autoSpaced = true
     }
 
     /**
@@ -318,6 +372,7 @@ class TypingController(private val learned: LearnedWords) {
 
     /** Records finished text ("word", or "let go" from a split) for frequency and word pairs. */
     private fun remember(text: String, previous: String?) {
+        lastWord = text.substringAfterLast(' ').ifEmpty { null }
         if (!learningEnabled) return
         var prev = previous
         for (word in text.split(' ')) {

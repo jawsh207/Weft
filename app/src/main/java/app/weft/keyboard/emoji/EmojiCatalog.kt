@@ -41,6 +41,31 @@ class EmojiCatalog(val groups: List<EmojiGroup>) {
      * each, so the plain emoji leads ("heart" → ❤️ before 💘). Colons around a
      * shortcode are ignored.
      */
+    /**
+     * The emoji a typed word clearly names, for the suggestion strip: an emoji
+     * whose name is the word ("pizza" → 🍕, "dog" → 🐕) or a hand-picked keyword
+     * ("lol" → 😂). Plurals count ("pizzas"). Looser keyword matches don't, so
+     * the strip isn't full of emoji for every word.
+     */
+    fun suggestFor(word: String): Emoji? {
+        val w = word.lowercase()
+        if (w.length < 2 || w in NOT_SUGGESTED) return null
+        return direct[w] ?: (if (w.length > 3 && w.endsWith("s")) direct[w.dropLast(1)] else null)
+    }
+
+    private val direct: Map<String, Emoji> by lazy {
+        val out = HashMap<String, Emoji>()
+        // Hand-picked keywords first (lowest pick order wins), then exact names.
+        val picks = HashMap<String, Pair<Int, Emoji>>()
+        for (e in all) for ((k, order) in e.picks) {
+            val old = picks[k]
+            if (old == null || order < old.first) picks[k] = order to e
+        }
+        picks.forEach { (k, v) -> out[k] = v.second }
+        for (e in all) out.putIfAbsent(e.name.lowercase(), e)
+        out
+    }
+
     fun search(query: String, limit: Int = 60): List<Emoji> {
         val q = query.trim().lowercase().trim(':')
         if (q.isEmpty()) return emptyList()
@@ -71,6 +96,12 @@ class EmojiCatalog(val groups: List<EmojiGroup>) {
 
     companion object {
         private val WORD_BREAK = Regex("[^\\p{L}\\p{N}]+")
+
+        /** Everyday words that happen to name an emoji but shouldn't offer one. */
+        private val NOT_SUGGESTED = setOf(
+            "a", "i", "it", "on", "up", "id", "new", "free", "soon", "end", "back", "top", "ok", "no", "yes",
+            "the", "and", "or", "of", "to", "in", "is", "am", "at", "be", "so", "do", "go", "we", "me", "my",
+        )
 
         /**
          * Parses the asset. [isSupported] reports whether the system emoji font
