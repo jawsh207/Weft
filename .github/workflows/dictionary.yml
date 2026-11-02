@@ -9,6 +9,7 @@ on:
     branches: [main]
     paths:
       - tools/dictgen/**
+      - tools/bench/*.py
       - .github/workflows/dictionary.yml
 
 permissions:
@@ -47,14 +48,17 @@ jobs:
           export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct -- tools/dictgen)
           python3 tools/dictgen/make_dict.py en_US
 
+      - name: Build benchmark data
+        run: python3 tools/bench/make_bench.py --tatoeba tools/dictgen/cache/en_US/eng_sentences.tsv.bz2
+
       - name: Commit if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add app/src/main/assets/dictionaries/
+          git add app/src/main/assets/dictionaries/ tools/bench/data/
           if git diff --cached --quiet; then
             echo "Dictionary unchanged."
           else
-            git commit -m "Update en_US dictionary"
+            git commit -m "Update dictionaries and benchmark data"
             git push
           fi

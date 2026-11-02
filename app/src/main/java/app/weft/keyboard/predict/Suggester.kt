@@ -51,7 +51,11 @@ class Suggester(
     private val learned: LearnedWords,
 ) {
 
-    fun suggest(typed: String, previous: String?, limit: Int = 3): SuggestionResult {
+    /**
+     * Suggestions for [typed] (the word being typed, maybe empty) after
+     * [previous] and, before that, [before] (the word two back).
+     */
+    fun suggest(typed: String, previous: String?, limit: Int = 3, before: String? = null): SuggestionResult {
         val dict = dictionary
         val prevNode = if (dict != null && previous != null) dict.findIgnoreCase(previous) else -1
 

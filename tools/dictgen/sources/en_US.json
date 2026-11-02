@@ -26,7 +26,16 @@
       "file": "scowl_en_US_70.txt",
       "license": "MIT-like (SCOWL)",
       "manual": "Generate at http://app.aspell.net/create (size 70, spelling US, variants 1, no diacritic stripping) and save as tools/dictgen/cache/en_US/scowl_en_US_70.txt. /usr/share/hunspell/en_US.dic is used if this is missing.",
-      "fallbackPaths": ["/usr/share/hunspell/en_US.dic", "/usr/share/myspell/en_US.dic"],
+      "fallbackPaths": [
+        "/usr/share/hunspell/en_US.dic",
+        "/usr/share/myspell/en_US.dic"
+      ],
+      "optional": true
+    },
+    "tatoeba": {
+      "url": "https://downloads.tatoeba.org/exports/per_language/eng/eng_sentences.tsv.bz2",
+      "file": "eng_sentences.tsv.bz2",
+      "license": "CC-BY-2.0-FR",
       "optional": true
     }
   }
