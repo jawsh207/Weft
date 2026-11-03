@@ -32,6 +32,12 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".settings.LearnedWordsActivity"
+            android:exported="false"
+            android:label="@string/learned_title"
+            android:windowSoftInputMode="adjustResize" />
+
         <service
             android:name=".ime.WeftKeyboardService"
             android:exported="true"

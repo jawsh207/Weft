@@ -102,4 +102,80 @@ class LearnedWordsTest {
         assertFalse(l.isRemoved("duck"))
         assertEquals(0, l.pairCount)
     }
+
+    // --- Viewing and editing ---------------------------------------------------------------------
+
+    @Test
+    fun listsWhatWasLearned() {
+        val l = LearnedWords(null)
+        l.recordUse("weftish")
+        l.recordUse("Zyx", explicit = true)
+        repeat(2) { l.recordWord("you", "see") }
+        l.keepAsTyped("teh")
+        l.remove("duck")
+        assertEquals(listOf("weftish" to false, "Zyx" to true), l.newWords().map { it.word to it.learned })
+        assertEquals(listOf(LearnedWords.WordPair("see", "you", 2, l.wordPairs()[0].lastUsed)), l.wordPairs())
+        assertEquals(listOf("teh"), l.keptAsTypedWords())
+        assertEquals(listOf("duck"), l.removedWords())
+    }
+
+    @Test
+    fun addsRenamesAndDeletesWords() {
+        val l = LearnedWords(null)
+        assertTrue(l.addWord("Weft"))
+        assertTrue(l.isKnown("weft"))
+        assertFalse(l.addWord("two words"))
+        repeat(2) { l.recordWord("weft", "love") }
+        assertTrue(l.renameWord("Weft", "Wefts"))
+        assertFalse(l.isKnown("weft"))
+        assertTrue(l.isKnown("wefts"))
+        assertEquals(listOf("wefts" to 2), l.nextWords("love")) // history follows the new spelling
+        l.deleteWord("Wefts")
+        assertTrue(l.newWords().isEmpty())
+        assertTrue(l.nextWords("love").isEmpty())
+    }
+
+    @Test
+    fun editsAndDeletesPairs() {
+        val l = LearnedWords(null)
+        repeat(3) { l.recordWord("you", "see") }
+        assertTrue(l.editPair("see", "you", "see", "ya"))
+        assertEquals(listOf("ya" to 3), l.nextWords("see"))
+        assertTrue(l.addPair("talk", "soon"))
+        assertEquals(listOf("soon" to 2), l.nextWords("talk"))
+        l.deletePair("talk", "soon")
+        assertTrue(l.nextWords("talk").isEmpty())
+        assertFalse(l.editPair("see", "ya", "two words", "x"))
+    }
+
+    @Test
+    fun editsKeptAndRemovedLists() {
+        val l = LearnedWords(null)
+        l.keepAsTyped("teh")
+        assertTrue(l.editKeptAsTyped("teh", "hte"))
+        assertFalse(l.isKeptAsTyped("teh"))
+        assertTrue(l.isKeptAsTyped("hte"))
+        l.stopKeepingAsTyped("hte")
+        assertTrue(l.keptAsTypedWords().isEmpty())
+        l.remove("duck")
+        assertTrue(l.editRemoved("duck", "ducks"))
+        assertFalse(l.isRemoved("duck"))
+        assertTrue(l.isRemoved("ducks"))
+        l.restore("ducks")
+        assertTrue(l.removedWords().isEmpty())
+    }
+
+    @Test
+    fun editsAreSaved() {
+        val dir = Files.createTempDirectory("weft").toFile()
+        val a = LearnedWords(dir.resolve("w.tsv"), dir.resolve("h.tsv"))
+        a.ensureLoaded()
+        a.addWord("Weft")
+        a.addPair("talk", "soon")
+        a.save()
+        val b = LearnedWords(dir.resolve("w.tsv"), dir.resolve("h.tsv"))
+        b.ensureLoaded()
+        assertTrue(b.isKnown("Weft"))
+        assertEquals(listOf("soon" to 2), b.nextWords("talk"))
+    }
 }

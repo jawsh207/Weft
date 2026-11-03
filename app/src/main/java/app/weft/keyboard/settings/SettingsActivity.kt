@@ -46,6 +46,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.rememberCoroutineScope
+import app.weft.keyboard.ime.LearnedStore
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.runtime.remember
@@ -71,9 +74,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.core.content.edit
 import app.weft.keyboard.ime.DictionaryLoader
 import org.json.JSONObject
-import java.io.File
 import app.weft.keyboard.R
-import app.weft.keyboard.predict.LearnedWords
 import app.weft.keyboard.ime.WeftKeyboardService
 import app.weft.keyboard.theme.SystemTheme
 
@@ -300,10 +301,24 @@ private fun TypingSettings() {
     var learn by remember { mutableStateOf(prefs.getBoolean(Prefs.LEARN_WORDS, true)) }
     var swipe by remember { mutableStateOf(prefs.getBoolean(Prefs.SWIPE, true)) }
     var emoji by remember { mutableStateOf(prefs.emojiSuggestions()) }
-    val learnedFile = remember { File(context.filesDir, LearnedWords.WORDS_FILE) }
-    val historyFile = remember { File(context.filesDir, LearnedWords.HISTORY_FILE) }
-    var learnedCount by remember { mutableIntStateOf(countLines(learnedFile)) }
-    var pairCount by remember { mutableIntStateOf(countLines(historyFile, prefix = "p\t")) }
+    val learned = remember { LearnedStore.get(context) }
+    val scope = rememberCoroutineScope()
+    var learnedCount by remember { mutableIntStateOf(0) }
+    var pairCount by remember { mutableIntStateOf(0) }
+    var hasAny by remember { mutableStateOf(false) }
+    // Counts refresh whenever the screen comes back (e.g. from Learned words).
+    var refresh by remember { mutableIntStateOf(0) }
+    LifecycleResumeEffect(Unit) {
+        refresh++
+        onPauseOrDispose { }
+    }
+    LaunchedEffect(refresh) {
+        withContext(Dispatchers.IO) { learned.ensureLoaded() }
+        learnedCount = learned.size
+        pairCount = learned.pairCount
+        hasAny = learned.size > 0 || learned.pairCount > 0 ||
+            learned.keptAsTypedWords().isNotEmpty() || learned.removedWords().isNotEmpty()
+    }
 
     SectionCard(stringResource(R.string.settings_typing_title)) {
         SwitchRow(stringResource(R.string.settings_suggestions), stringResource(R.string.settings_suggestions_body), suggestions) {
@@ -336,16 +351,24 @@ private fun TypingSettings() {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+        Row(
+            Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+        ) {
             OutlinedButton(
                 onClick = {
-                    learnedFile.delete()
-                    historyFile.delete()
-                    prefs.edit { putInt(Prefs.LEARNED_RESET, prefs.getInt(Prefs.LEARNED_RESET, 0) + 1) }
+                    learned.clear()
+                    scope.launch(Dispatchers.IO) { learned.save() }
                     learnedCount = 0
                     pairCount = 0
+                    hasAny = false
                 },
-                enabled = learnedCount > 0 || historyFile.exists(),
+                enabled = hasAny,
             ) { Text(stringResource(R.string.settings_clear_learned)) }
+            Button(onClick = { context.startActivity(Intent(context, LearnedWordsActivity::class.java)) }) {
+                Text(stringResource(R.string.settings_manage_learned))
+            }
         }
     }
 }
@@ -519,8 +542,6 @@ private fun DictionaryInfo() {
     }
 }
 
-private fun countLines(file: File, prefix: String = ""): Int =
-    if (file.exists()) file.useLines { lines -> lines.count { it.isNotBlank() && it.startsWith(prefix) } } else 0
 
 private fun Context.hasMic(): Boolean =
     checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED

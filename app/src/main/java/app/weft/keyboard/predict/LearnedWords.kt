@@ -40,6 +40,17 @@ class LearnedWords(private val file: File?, private val historyFile: File? = nul
     @Volatile
     private var dirty = false
 
+    @Volatile
+    private var loaded = false
+
+    /** Loads from disk the first time; later calls do nothing. Call off the main thread. */
+    @Synchronized
+    fun ensureLoaded() {
+        if (loaded) return
+        load()
+        loaded = true
+    }
+
     fun load() {
         file?.takeIf { it.exists() }?.forEachLine { line ->
             val parts = line.split('\t')
@@ -221,6 +232,135 @@ class LearnedWords(private val file: File?, private val historyFile: File? = nul
         removed.clear()
         dirty = true
     }
+
+    // --- Viewing and editing (Settings › Learned words) -----------------------------------
+
+    /** A new word the user has typed: [learned] once it's used enough to be suggested. */
+    data class NewWord(val word: String, val uses: Int, val lastUsed: Long, val learned: Boolean)
+
+    data class WordPair(val first: String, val second: String, val uses: Int, val lastUsed: Long)
+
+    fun newWords(): List<NewWord> =
+        words.entries.map { NewWord(it.key, it.value.count, it.value.lastUsed, it.value.count >= MIN_USES) }
+            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.word })
+
+    fun wordPairs(): List<WordPair> =
+        pairs.entries.flatMap { (first, next) -> next.entries.map { WordPair(first, it.key, it.value.count, it.value.lastUsed) } }
+            .sortedWith(compareBy<WordPair> { it.first }.thenBy { it.second })
+
+    fun keptAsTypedWords(): List<String> = neverCorrect.sorted()
+
+    fun removedWords(): List<String> = removed.sorted()
+
+    /** Adds [word] as a learned word right away, as if picked from the strip. */
+    fun addWord(word: String): Boolean {
+        val w = word.trim()
+        if (!isStorable(w)) return false
+        removed -= w.lowercase()
+        val e = words.getOrPut(w) { Entry(0, System.currentTimeMillis()) }
+        e.count = maxOf(e.count, MIN_USES)
+        dirty = true
+        return true
+    }
+
+    /** Respells a learned word, keeping its uses (merged if [new] is already there). */
+    fun renameWord(old: String, new: String): Boolean {
+        val n = new.trim()
+        if (!isStorable(n)) return false
+        if (n == old) return true
+        val e = words.remove(old) ?: return false
+        val existing = words[n]
+        if (existing != null) {
+            existing.count += e.count
+            existing.lastUsed = maxOf(existing.lastUsed, e.lastUsed)
+        } else {
+            words[n] = e
+        }
+        renameInHistory(old.lowercase(), n.lowercase())
+        removed -= n.lowercase()
+        dirty = true
+        return true
+    }
+
+    /** Forgets a learned word and what was learned about it, without blocking it from suggestions. */
+    fun deleteWord(word: String) {
+        words.remove(word)
+        val w = word.lowercase()
+        usage.remove(w)
+        pairs.remove(w)
+        pairs.values.forEach { it.remove(w) }
+        pairs.entries.removeIf { it.value.isEmpty() }
+        dirty = true
+    }
+
+    fun deletePair(first: String, second: String) {
+        val next = pairs[first.lowercase()] ?: return
+        if (next.remove(second.lowercase()) != null) dirty = true
+        if (next.isEmpty()) pairs.remove(first.lowercase())
+    }
+
+    /** Changes either word of a pair, keeping its uses. */
+    fun editPair(first: String, second: String, newFirst: String, newSecond: String): Boolean {
+        val f = newFirst.trim().lowercase()
+        val s = newSecond.trim().lowercase()
+        if (!isPairWord(f) || !isPairWord(s)) return false
+        val e = pairs[first.lowercase()]?.get(second.lowercase()) ?: return false
+        deletePair(first, second)
+        val target = pairs.getOrPut(f) { ConcurrentHashMap() }
+        val old = target[s]
+        target[s] = if (old == null) e else Entry(old.count + e.count, maxOf(old.lastUsed, e.lastUsed))
+        dirty = true
+        return true
+    }
+
+    /** Adds a pair as if typed often enough to be predicted. */
+    fun addPair(first: String, second: String): Boolean {
+        val f = first.trim().lowercase()
+        val s = second.trim().lowercase()
+        if (!isPairWord(f) || !isPairWord(s)) return false
+        val e = pairs.getOrPut(f) { ConcurrentHashMap() }.getOrPut(s) { Entry(0, System.currentTimeMillis()) }
+        e.count = maxOf(e.count, PAIR_MIN_USES)
+        dirty = true
+        return true
+    }
+
+    /** Lets autocorrect fix [word] again. */
+    fun stopKeepingAsTyped(word: String) {
+        if (neverCorrect.remove(word.lowercase())) dirty = true
+    }
+
+    fun editKeptAsTyped(old: String, new: String): Boolean {
+        val n = new.trim()
+        if (!isStorable(n)) return false
+        stopKeepingAsTyped(old)
+        keepAsTyped(n)
+        return true
+    }
+
+    fun editRemoved(old: String, new: String): Boolean {
+        val n = new.trim()
+        if (!isStorable(n) && n.length != 1) return false
+        restore(old)
+        removed += n.lowercase()
+        dirty = true
+        return true
+    }
+
+    private fun renameInHistory(old: String, new: String) {
+        usage.remove(old)?.let { e ->
+            val x = usage[new]
+            usage[new] = if (x == null) e else Entry(x.count + e.count, maxOf(x.lastUsed, e.lastUsed))
+        }
+        pairs.remove(old)?.let { next ->
+            val target = pairs.getOrPut(new) { ConcurrentHashMap() }
+            next.forEach { (k, e) -> target.merge(k, e) { a, b -> Entry(a.count + b.count, maxOf(a.lastUsed, b.lastUsed)) } }
+        }
+        for (next in pairs.values) {
+            next.remove(old)?.let { e -> next.merge(new, e) { a, b -> Entry(a.count + b.count, maxOf(a.lastUsed, b.lastUsed)) } }
+        }
+    }
+
+    private fun isPairWord(w: String) = (isStorable(w) || w.length == 1) && w.any { it.isLetter() }
 
     /** Number of word pairs learned (for settings). */
     val pairCount: Int get() = pairs.values.sumOf { it.size }

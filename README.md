@@ -56,7 +56,9 @@ Released and working:
   system personal dictionary), the words you use most, and which words you
   type together, used by suggestions, next-word predictions and swipe.
   Long-press a suggestion to remove it. Never learns in password, incognito,
-  email or web address fields; clear it all in settings
+  email or web address fields. Settings › View and edit lists everything learned
+  (new words, word pairs, words kept as typed, removed suggestions) to edit,
+  add to or delete; or clear it all
 - Smart spacing: picking a suggestion adds a space; typing `.` or `,` next
   moves it after the punctuation
 - **Swipe typing** with Weft's own open source decoder: a trail follows your

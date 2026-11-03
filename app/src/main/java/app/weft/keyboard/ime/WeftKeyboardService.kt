@@ -52,7 +52,6 @@ import app.weft.keyboard.settings.keyHeight
 import app.weft.keyboard.settings.numberRow
 import app.weft.keyboard.settings.voiceOffline
 import app.weft.keyboard.settings.learnWords
-import app.weft.keyboard.settings.learnedReset
 import app.weft.keyboard.settings.showSuggestions
 import app.weft.keyboard.settings.swipeTyping
 import app.weft.keyboard.settings.SettingsActivity
@@ -66,7 +65,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 
 /**
  * The keyboard. Hosts Compose inside an InputMethodService, which needs the
@@ -108,14 +106,12 @@ class WeftKeyboardService :
     @Volatile
     private var swipeDecoder: SwipeDecoder? = null
     private var swipeAllowed = false
-    private var learnedResetSeen = 0
     private lateinit var clipboard: ClipboardManager
     private val clipListener = ClipboardManager.OnPrimaryClipChangedListener { updateClipboardState() }
 
-    /** "Clear" in settings takes effect at once, even if the keyboard is showing. */
+    /** Look-and-feel settings take effect at once, even if the keyboard is showing. */
     private val prefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
         when (key) {
-            Prefs.LEARNED_RESET -> applyLearnedReset(prefs.learnedReset())
             Prefs.HAPTICS, Prefs.KEY_HEIGHT, Prefs.NUMBER_ROW -> applyLookAndFeel(prefs)
         }
     }
@@ -149,10 +145,7 @@ class WeftKeyboardService :
         savedStateController.performRestore(null)
         moveLifecycleTo(Lifecycle.State.CREATED)
         voice = SystemVoiceInput(this, voiceListener)
-        learned = LearnedWords(
-            File(filesDir, LearnedWords.WORDS_FILE),
-            File(filesDir, LearnedWords.HISTORY_FILE),
-        )
+        learned = LearnedStore.get(this) // shared with Settings › Learned words
         typing = TypingController(learned)
         clipboard = getSystemService(ClipboardManager::class.java)
         clipboard.addPrimaryClipChangedListener(clipListener)
@@ -229,8 +222,7 @@ class WeftKeyboardService :
     private fun loadPrediction() {
         lifecycleScope.launch {
             withContext(Dispatchers.IO) {
-                learned.load()
-                learnedResetSeen = Prefs.of(this@WeftKeyboardService).learnedReset()
+                learned.ensureLoaded()
                 learned.setSystemWords(DictionaryLoader.systemUserWords(this@WeftKeyboardService))
             }
             loadDictionary(currentLocale())
@@ -358,21 +350,12 @@ class WeftKeyboardService :
         typing.learningEnabled = policy.learning
         swipeAllowed = policy.swipe
         state.swipeEnabled = swipeAllowed && swipeDecoder != null
-
-        applyLearnedReset(prefs.learnedReset())
     }
 
     private fun applyLookAndFeel(prefs: android.content.SharedPreferences) {
         state.haptics = prefs.haptics()
         state.keyHeight = prefs.keyHeight()
         state.numberRow = prefs.numberRow()
-    }
-
-    private fun applyLearnedReset(reset: Int) {
-        if (reset == learnedResetSeen) return
-        learnedResetSeen = reset
-        learned.clear()
-        lifecycleScope.launch(Dispatchers.IO) { learned.save() }
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
