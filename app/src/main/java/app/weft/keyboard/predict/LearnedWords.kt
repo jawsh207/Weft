@@ -19,6 +19,9 @@ import kotlin.math.min
  *    predictions and to break ties ("for"/"four", "to"/"too").
  *  - **Never correct:** words whose autocorrect the user undid.
  *  - **Removed:** words the user removed from suggestions.
+ *  - **Swipe habits:** where the user's thumb lands relative to the letters it
+ *    means (a steady offset the decoder corrects for), and which of the
+ *    decoder's guesses they pick instead of its first one ("four" over "for").
  *
  * Thread-safe: reads happen while ranking off the main thread.
  */
@@ -35,6 +38,12 @@ class LearnedWords(private val file: File?, private val historyFile: File? = nul
     /** Lowercase previous word → (lowercase next word → uses). */
     private val pairs = ConcurrentHashMap<String, ConcurrentHashMap<String, Entry>>()
     private val neverCorrect: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    // Swipe habits: running average offset (key widths) and "picked X over the first guess Y".
+    @Volatile private var swipeDx = 0f
+    @Volatile private var swipeDy = 0f
+    @Volatile private var swipeSamples = 0
+    private val swipeChoices = ConcurrentHashMap<String, Entry>()
     private val removed: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     @Volatile
@@ -72,6 +81,15 @@ class LearnedWords(private val file: File?, private val historyFile: File? = nul
                     pairs.getOrPut(p[1]) { ConcurrentHashMap() }[p[2]] = Entry(count, p[4].toLongOrNull() ?: 0L)
                 }
                 "n" -> if (p.size == 2) neverCorrect += p[1]
+                "o" -> if (p.size == 4) {
+                    swipeDx = p[1].toFloatOrNull() ?: 0f
+                    swipeDy = p[2].toFloatOrNull() ?: 0f
+                    swipeSamples = p[3].toIntOrNull() ?: 0
+                }
+                "c" -> if (p.size == 5) {
+                    val count = p[3].toIntOrNull() ?: return@forEachLine
+                    swipeChoices["${p[1]}\t${p[2]}"] = Entry(count, p[4].toLongOrNull() ?: 0L)
+                }
                 "r" -> if (p.size == 2) removed += p[1]
             }
         }
@@ -98,6 +116,8 @@ class LearnedWords(private val file: File?, private val historyFile: File? = nul
                 }
                 for (word in neverCorrect.sorted()) w.write("n\t$word\n")
                 for (word in removed.sorted()) w.write("r\t$word\n")
+                if (swipeSamples > 0) w.write("o\t$swipeDx\t$swipeDy\t$swipeSamples\n")
+                for ((k, e) in swipeChoices.entries.sortedBy { it.key }) w.write("c\t$k\t${e.count}\t${e.lastUsed}\n")
             }
         }
     }
@@ -230,7 +250,51 @@ class LearnedWords(private val file: File?, private val historyFile: File? = nul
         pairs.clear()
         neverCorrect.clear()
         removed.clear()
+        swipeChoices.clear()
+        swipeDx = 0f
+        swipeDy = 0f
+        swipeSamples = 0
         dirty = true
+    }
+
+    // --- Swipe habits ---------------------------------------------------------------------------
+
+    /**
+     * Where an accepted swipe started and ended relative to its word's first and
+     * last letters (key widths). Kept as a running average that settles after a
+     * few dozen swipes and keeps following slowly if the user's grip changes.
+     */
+    @Synchronized
+    fun recordSwipeOffset(dx: Float, dy: Float) {
+        if (dx.isNaN() || dy.isNaN()) return
+        val rate = maxOf(1f / (swipeSamples + 1), SWIPE_OFFSET_RATE)
+        swipeDx = (swipeDx + (dx - swipeDx) * rate).coerceIn(-MAX_SWIPE_OFFSET, MAX_SWIPE_OFFSET)
+        swipeDy = (swipeDy + (dy - swipeDy) * rate).coerceIn(-MAX_SWIPE_OFFSET, MAX_SWIPE_OFFSET)
+        swipeSamples = minOf(swipeSamples + 1, 100_000)
+        dirty = true
+    }
+
+    /** The user's steady swipe offset (dx, dy) once there are enough swipes to trust it, else null. */
+    fun swipeOffset(): FloatArray? =
+        if (swipeSamples >= MIN_SWIPE_SAMPLES) floatArrayOf(swipeDx, swipeDy) else null
+
+    val swipeSampleCount: Int get() = swipeSamples
+
+    /** The user swiped, got [top] first, and picked [chosen] instead. */
+    fun recordSwipeChoice(top: String, chosen: String, now: Long = System.currentTimeMillis()) {
+        val t = top.lowercase()
+        val c = chosen.lowercase()
+        if (t == c || !isStorable(t) && t.length != 1 || !isStorable(c) && c.length != 1) return
+        swipeChoices.getOrPut("$t\t$c") { Entry(0, now) }.apply { count++; lastUsed = now }
+        // Picking the first guess back later weakens the old preference.
+        swipeChoices["$c\t$t"]?.let { if (--it.count <= 0) swipeChoices.remove("$c\t$t") }
+        dirty = true
+    }
+
+    /** Bonus for [word] when the decoder's first guess is [top] and the user has preferred [word] before. */
+    fun swipeChoiceBoost(top: String, word: String): Float {
+        val n = swipeChoices["${top.lowercase()}\t${word.lowercase()}"]?.count ?: return 0f
+        return min(MAX_SWIPE_CHOICE_BOOST, SWIPE_CHOICE_BOOST * n)
     }
 
     // --- Viewing and editing (Settings › Learned words) -----------------------------------
@@ -407,6 +471,11 @@ class LearnedWords(private val file: File?, private val historyFile: File? = nul
         const val MAX_BOOST = 1.5f
         const val PAIR_BOOST_PER_USE = 0.6f
         const val MAX_PAIR_BOOST = 3f
+        const val MIN_SWIPE_SAMPLES = 15
+        const val SWIPE_OFFSET_RATE = 0.05f
+        const val MAX_SWIPE_OFFSET = 0.6f
+        const val SWIPE_CHOICE_BOOST = 1.2f
+        const val MAX_SWIPE_CHOICE_BOOST = 4f
 
         /** File names in the app's private storage. */
         const val WORDS_FILE = "learned_words.tsv"

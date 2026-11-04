@@ -301,6 +301,7 @@ private fun TypingSettings() {
     var learn by remember { mutableStateOf(prefs.getBoolean(Prefs.LEARN_WORDS, true)) }
     var swipe by remember { mutableStateOf(prefs.getBoolean(Prefs.SWIPE, true)) }
     var emoji by remember { mutableStateOf(prefs.emojiSuggestions()) }
+    var swipeVisuals by remember { mutableStateOf(prefs.swipeVisuals()) }
     val learned = remember { LearnedStore.get(context) }
     val scope = rememberCoroutineScope()
     var learnedCount by remember { mutableIntStateOf(0) }
@@ -336,6 +337,10 @@ private fun TypingSettings() {
         SwitchRow(stringResource(R.string.settings_swipe), stringResource(R.string.settings_swipe_body), swipe) {
             swipe = it
             prefs.edit { putBoolean(Prefs.SWIPE, it) }
+        }
+        SwitchRow(stringResource(R.string.settings_swipe_visuals), stringResource(R.string.settings_swipe_visuals_body), swipeVisuals, enabled = swipe) {
+            swipeVisuals = it
+            prefs.edit { putBoolean(Prefs.SWIPE_VISUALS, it) }
         }
         SwitchRow(stringResource(R.string.settings_learn), stringResource(R.string.settings_learn_body), learn) {
             learn = it

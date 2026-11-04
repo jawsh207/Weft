@@ -1,5 +1,6 @@
 package app.weft.keyboard.predict
 
+import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.sqrt
 
@@ -57,15 +58,19 @@ class SwipeDecoder(
 
     /** [previous] is the word before this one, [before] the one before that. */
     fun decode(
-        xs: FloatArray,
-        ys: FloatArray,
+        rawXs: FloatArray,
+        rawYs: FloatArray,
         previous: String?,
         limit: Int = 5,
         before: String? = null,
     ): List<Candidate> {
-        if (xs.size < 2 || xs.size != ys.size) return emptyList()
-        if (pathLength(xs, ys) < MIN_PATH) return emptyList()
+        if (rawXs.size < 2 || rawXs.size != rawYs.size) return emptyList()
+        if (pathLength(rawXs, rawYs) < MIN_PATH) return emptyList()
 
+        // Correct for where this user's thumb habitually lands (learned from their swipes).
+        val offset = learned.swipeOffset()
+        val xs = if (offset == null) rawXs else FloatArray(rawXs.size) { rawXs[it] - offset[0] }
+        val ys = if (offset == null) rawYs else FloatArray(rawYs.size) { rawYs[it] - offset[1] }
         val dense = resample(xs, ys, DENSE_POINTS)
         val shape = resample(xs, ys, SHAPE_POINTS)
         val found = HashMap<String, Candidate>()
@@ -101,7 +106,36 @@ class SwipeDecoder(
             keepBest(found, Candidate(word, score, geometry))
         }
         // "major" and "Major" trace the same path: offer the likelier one once.
-        return found.values.sortedByDescending { it.score }.distinctBy { it.word.lowercase() }.take(limit)
+        var ranked = found.values.sortedByDescending { it.score }.distinctBy { it.word.lowercase() }
+        // Words this user picked over the first guess before ("four" over "for") move up.
+        val top = ranked.firstOrNull()?.word
+        if (top != null) {
+            ranked = ranked
+                .map { c -> learned.swipeChoiceBoost(top, c.word).let { if (it > 0f) c.copy(score = c.score + it) else c } }
+                .sortedByDescending { it.score }
+        }
+        return ranked.take(limit)
+    }
+
+    /**
+     * Learns from a finished swipe: [chosen] is what the user kept, [top] the
+     * decoder's first guess, [xs]/[ys] the swipe as drawn (before any correction).
+     * Records the pick if it differs, and where the swipe started and ended
+     * relative to the word's first and last letters.
+     */
+    fun learnFrom(chosen: String, top: String, xs: FloatArray, ys: FloatArray) {
+        if (!chosen.equals(top, ignoreCase = true)) learned.recordSwipeChoice(top, chosen)
+        val keys = keysOf(chosen)
+        if (keys.size < 2 || xs.size < 2 || xs.size != ys.size) return
+        val first = keys.first()
+        val last = keys.last()
+        val startDx = xs.first() - first[0]
+        val startDy = ys.first() - first[1]
+        val endDx = xs.last() - last[0]
+        val endDy = ys.last() - last[1]
+        // A swipe that wandered far from its word says nothing about the user's aim.
+        if (hypot(startDx, startDy) > MAX_LEARN_OFFSET || hypot(endDx, endDy) > MAX_LEARN_OFFSET) return
+        learned.recordSwipeOffset((startDx + endDx) / 2, (startDy + endDy) / 2)
     }
 
     // --- Candidate search ----------------------------------------------------------
@@ -234,6 +268,9 @@ class SwipeDecoder(
         const val BIGRAM_WEIGHT = 3f
         const val POSSESSIVE_PENALTY = 1f
         const val NAME_PENALTY = 1f
+
+        /** Start/end farther than this from the letters isn't used to learn the user's offset. */
+        const val MAX_LEARN_OFFSET = 1.2f
         const val DENSE_POINTS = 120
         const val SHAPE_POINTS = 48
         const val MAX_VISITS = 200_000

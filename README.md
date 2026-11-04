@@ -61,9 +61,12 @@ Released and working:
   add to or delete; or clear it all
 - Smart spacing: picking a suggestion adds a space; typing `.` or `,` next
   moves it after the punctuation
-- **Swipe typing** with Weft's own open source decoder: a trail follows your
-  finger, the best guess previews live, other guesses wait in the strip, and
-  delete removes a swiped word whole. See [docs/swipe-typing.md](docs/swipe-typing.md)
+- **Swipe typing** with Weft's own open source decoder: a tapering trail
+  follows your finger, letters light up as you cross them, the best guess
+  floats above your finger and previews in the strip, other guesses wait beside
+  it, and delete removes a swiped word whole. It learns your swipes on the
+  phone: where your thumb tends to land, and which look-alike you mean ("four"
+  over "for"). See [docs/swipe-typing.md](docs/swipe-typing.md)
 
 ## Download
 

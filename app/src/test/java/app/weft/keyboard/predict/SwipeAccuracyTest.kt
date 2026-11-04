@@ -2,6 +2,7 @@ package app.weft.keyboard.predict
 
 import app.weft.keyboard.layout.KeyGeometry
 import app.weft.keyboard.layout.Layouts
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
@@ -55,6 +56,57 @@ class SwipeAccuracyTest {
         }
     }
 
+    /**
+     * A user whose thumb always lands about a third of a key low and to the left.
+     * After learning from swipes of other words, the decoder should do clearly
+     * better on this user than before.
+     */
+    @Test
+    fun learnsAUsersSteadyOffset() {
+        val file = dictionaryFile()
+        assumeTrue("dictionary not built", file != null)
+        val dict = BinaryDictionary.map(file!!)
+        val centers = KeyGeometry.centers(Layouts.qwerty)
+        val learned = LearnedWords(null)
+        val decoder = SwipeDecoder(dict, centers, learned)
+        val all = (1 until dict.nodeCount)
+            .filter { dict.freq(it) >= 150 && !dict.isOffensive(it) }
+            .map { dict.word(it) }
+            .filter { it.length in 2..11 && it.all { c -> c in 'a'..'z' } }
+            .shuffled(Random(21))
+        val training = all.take(150)
+        val testWords = all.drop(150).take(SAMPLE)
+        val sim = SwipeSimulator(centers, Random(22))
+        fun shifted(w: String) = sim.natural(w)?.let { s ->
+            SwipeSimulator.Swipe(FloatArray(s.xs.size) { s.xs[it] - 0.3f }, FloatArray(s.ys.size) { s.ys[it] + 0.35f })
+        }
+        val (before, _) = score(decoder, testWords, ::shifted)
+        for (w in training) {
+            val s = shifted(w) ?: continue
+            val first = decoder.decode(s.xs, s.ys, null).firstOrNull()?.word ?: continue
+            decoder.learnFrom(w, first, s.xs, s.ys) // the user kept (or picked) the right word
+        }
+        val (after, _) = score(decoder, testWords, ::shifted)
+        println("Swipe accuracy (offset thumb): top-1 %.1f%% before learning, %.1f%% after".format(before, after))
+        assertTrue("learning should help an offset thumb: $before -> $after", after >= before + MIN_OFFSET_GAIN)
+    }
+
+    @Test
+    fun remembersWhichLookAlikeTheUserMeans() {
+        val file = dictionaryFile()
+        assumeTrue("dictionary not built", file != null)
+        val dict = BinaryDictionary.map(file!!)
+        val centers = KeyGeometry.centers(Layouts.qwerty)
+        val learned = LearnedWords(null)
+        val decoder = SwipeDecoder(dict, centers, learned)
+        val s = SwipeSimulator(centers, Random(5)).straight("for", 0f)!!
+        val guesses = decoder.decode(s.xs, s.ys, null).map { it.word }
+        val first = guesses[0]
+        val other = guesses[1]
+        repeat(2) { decoder.learnFrom(other, first, s.xs, s.ys) } // the user picked the other one twice
+        assertEquals(other, decoder.decode(s.xs, s.ys, null).first().word)
+    }
+
     private fun score(decoder: SwipeDecoder, words: List<String>, make: (String) -> SwipeSimulator.Swipe?): Pair<Double, Double> {
         var top1 = 0
         var top3 = 0
@@ -76,5 +128,6 @@ class SwipeAccuracyTest {
         const val MIN_TOP3 = 99.0
         const val MIN_NATURAL = 90.0
         const val MIN_HURRIED = 78.0
+        const val MIN_OFFSET_GAIN = 3.0
     }
 }

@@ -19,6 +19,7 @@ object Prefs {
     const val NUMBER_ROW = "number_row"
     const val VOICE_OFFLINE = "voice_offline"
     const val EMOJI_SUGGESTIONS = "emoji_suggestions"
+    const val SWIPE_VISUALS = "swipe_visuals"
 
     fun of(context: Context): SharedPreferences =
         context.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -34,3 +35,4 @@ fun SharedPreferences.keyHeight() = KeyHeight.of(getString(Prefs.KEY_HEIGHT, nul
 fun SharedPreferences.numberRow() = getBoolean(Prefs.NUMBER_ROW, false)
 fun SharedPreferences.voiceOffline() = getBoolean(Prefs.VOICE_OFFLINE, false)
 fun SharedPreferences.emojiSuggestions() = getBoolean(Prefs.EMOJI_SUGGESTIONS, true)
+fun SharedPreferences.swipeVisuals() = getBoolean(Prefs.SWIPE_VISUALS, true)

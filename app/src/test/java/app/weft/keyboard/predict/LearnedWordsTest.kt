@@ -178,4 +178,49 @@ class LearnedWordsTest {
         assertTrue(b.isKnown("Weft"))
         assertEquals(listOf("soon" to 2), b.nextWords("talk"))
     }
+
+    // --- Swipe habits ------------------------------------------------------------------------------
+
+    @Test
+    fun learnsASteadySwipeOffsetOnlyAfterEnoughSwipes() {
+        val l = LearnedWords(null)
+        repeat(LearnedWords.MIN_SWIPE_SAMPLES - 1) { l.recordSwipeOffset(-0.2f, 0.3f) }
+        assertEquals(null, l.swipeOffset())
+        repeat(50) { l.recordSwipeOffset(-0.2f, 0.3f) }
+        val o = l.swipeOffset()!!
+        assertEquals(-0.2f, o[0], 1e-3f)
+        assertEquals(0.3f, o[1], 1e-3f)
+        repeat(500) { l.recordSwipeOffset(5f, 5f) } // wild values are capped
+        assertEquals(LearnedWords.MAX_SWIPE_OFFSET, l.swipeOffset()!![1], 1e-3f)
+    }
+
+    @Test
+    fun remembersPicksOverTheFirstGuess() {
+        val l = LearnedWords(null)
+        assertEquals(0f, l.swipeChoiceBoost("for", "four"), 0f)
+        l.recordSwipeChoice("for", "four")
+        val once = l.swipeChoiceBoost("For", "Four")
+        assertTrue(once > 0f)
+        l.recordSwipeChoice("for", "four")
+        assertTrue(l.swipeChoiceBoost("for", "four") > once)
+        // Going back to the first guess weakens it.
+        l.recordSwipeChoice("four", "for")
+        assertEquals(once, l.swipeChoiceBoost("for", "four"), 1e-6f)
+    }
+
+    @Test
+    fun swipeHabitsAreSavedAndCleared() {
+        val dir = Files.createTempDirectory("weft").toFile()
+        val a = LearnedWords(dir.resolve("w.tsv"), dir.resolve("h.tsv"))
+        repeat(30) { a.recordSwipeOffset(0.1f, 0.25f) }
+        a.recordSwipeChoice("for", "four")
+        a.save()
+        val b = LearnedWords(dir.resolve("w.tsv"), dir.resolve("h.tsv"))
+        b.load()
+        assertEquals(0.25f, b.swipeOffset()!![1], 1e-3f)
+        assertTrue(b.swipeChoiceBoost("for", "four") > 0f)
+        b.clear()
+        assertEquals(null, b.swipeOffset())
+        assertEquals(0f, b.swipeChoiceBoost("for", "four"), 0f)
+    }
 }

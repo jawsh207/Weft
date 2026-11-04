@@ -392,4 +392,50 @@ class TypingControllerTest {
         assertEquals("I'd", TypingController.capitalI("i'd"))
         assertEquals(null, TypingController.capitalI("I"))
     }
+
+    // --- Learning from swipes -----------------------------------------------------------------------
+
+    private val kept = ArrayList<Pair<String, String>>()
+
+    private fun watchSwipes() {
+        controller.onSwipeKept = { k, first, _, _ -> kept += k to first }
+    }
+
+    private val pts = floatArrayOf(0f, 1f) to floatArrayOf(0f, 0f)
+
+    @Test
+    fun aSwipeIsLearnedFromOnceTheUserMovesOn() {
+        watchSwipes()
+        controller.onSwipe(editor, listOf("for", "four"), pts.first, pts.second)
+        assertTrue(kept.isEmpty()) // could still be swapped or deleted
+        controller.onSeparator(editor, " ")
+        assertEquals(listOf("for" to "for"), kept)
+    }
+
+    @Test
+    fun aSwappedSwipeTeachesThePick() {
+        watchSwipes()
+        controller.onSwipe(editor, listOf("for", "four"), pts.first, pts.second)
+        controller.onPick(editor, SuggestionChip("four"))
+        controller.onSwipe(editor, listOf("you"), pts.first, pts.second)
+        assertEquals(listOf("four" to "for"), kept)
+    }
+
+    @Test
+    fun aDeletedSwipeTeachesNothing() {
+        watchSwipes()
+        controller.onSwipe(editor, listOf("for"), pts.first, pts.second)
+        controller.onBackspace(editor)
+        controller.onSwipe(editor, listOf("you"), pts.first, pts.second)
+        assertEquals(emptyList<Pair<String, String>>(), kept.dropLast(0).filter { it.first == "for" })
+    }
+
+    @Test
+    fun noSwipeLearningWhenLearningIsOff() {
+        watchSwipes()
+        controller.learningEnabled = false
+        controller.onSwipe(editor, listOf("for"), pts.first, pts.second)
+        controller.onSeparator(editor, " ")
+        assertTrue(kept.isEmpty())
+    }
 }

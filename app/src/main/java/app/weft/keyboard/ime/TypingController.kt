@@ -75,7 +75,22 @@ class TypingController(private val learned: LearnedWords) {
      * word before it. It's learned once the user moves on, since they may still
      * swap it for a guess or delete it.
      */
-    private data class Swiped(val word: String, val alternatives: List<String>, val previous: String?)
+    private data class Swiped(
+        val word: String,
+        val alternatives: List<String>,
+        val previous: String?,
+        /** The swipe as drawn, for learning the user's habits once they move on. */
+        val xs: FloatArray? = null,
+        val ys: FloatArray? = null,
+    )
+
+    /**
+     * Called when the user moves on from a swipe (it wasn't deleted): the word they
+     * kept, the decoder's first guess, and the swipe. The keyboard passes it to the
+     * decoder to learn the user's habits.
+     */
+    @Volatile
+    var onSwipeKept: ((kept: String, firstGuess: String, xs: FloatArray, ys: FloatArray) -> Unit)? = null
 
     private var swiped: Swiped? = null
 
@@ -194,7 +209,7 @@ class TypingController(private val learned: LearnedWords) {
      * remembers it so delete can remove it whole and the strip can offer the
      * other guesses.
      */
-    fun onSwipe(editor: TextEditor, candidates: List<String>) {
+    fun onSwipe(editor: TextEditor, candidates: List<String>, xs: FloatArray? = null, ys: FloatArray? = null) {
         val word = candidates.firstOrNull() ?: return
         lastCorrection = null
         autoSpaced = false
@@ -205,7 +220,7 @@ class TypingController(private val learned: LearnedWords) {
         editor.insert(if (needsSpace) " $word" else word)
         // The word this one follows: the one right before the cursor, or the one before a space.
         val previous = if (needsSpace) ctx.fragment.ifEmpty { null } else ctx.previous
-        swiped = Swiped(word, candidates, previous)
+        swiped = Swiped(word, candidates, previous, xs, ys)
         phantomSpace = true
     }
 
@@ -216,6 +231,8 @@ class TypingController(private val learned: LearnedWords) {
      */
     fun onSeparator(editor: TextEditor, separator: String) {
         lastCorrection = null
+        // A swiped word ending here is kept (the word itself is learned below, as typed text).
+        swiped?.let(::learnSwipe)
         swiped = null
         phantomSpace = false
         if (autoSpaced) {
@@ -377,8 +394,18 @@ class TypingController(private val learned: LearnedWords) {
 
     /** The swiped word is final once the user moves on: learn it. */
     private fun finishSwipe() {
-        swiped?.let { remember(it.word, it.previous) }
+        swiped?.let {
+            remember(it.word, it.previous)
+            learnSwipe(it)
+        }
         swiped = null
+    }
+
+    private fun learnSwipe(s: Swiped) {
+        if (!learningEnabled) return
+        val xs = s.xs ?: return
+        val ys = s.ys ?: return
+        onSwipeKept?.invoke(s.word, s.alternatives.firstOrNull() ?: s.word, xs, ys)
     }
 
     /** Records finished text ("word", or "let go" from a split) for frequency and word pairs. */

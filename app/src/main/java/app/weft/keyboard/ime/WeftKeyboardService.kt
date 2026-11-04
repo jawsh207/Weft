@@ -50,6 +50,7 @@ import app.weft.keyboard.settings.emojiSuggestions
 import app.weft.keyboard.settings.haptics
 import app.weft.keyboard.settings.keyHeight
 import app.weft.keyboard.settings.numberRow
+import app.weft.keyboard.settings.swipeVisuals
 import app.weft.keyboard.settings.voiceOffline
 import app.weft.keyboard.settings.learnWords
 import app.weft.keyboard.settings.showSuggestions
@@ -112,7 +113,7 @@ class WeftKeyboardService :
     /** Look-and-feel settings take effect at once, even if the keyboard is showing. */
     private val prefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
         when (key) {
-            Prefs.HAPTICS, Prefs.KEY_HEIGHT, Prefs.NUMBER_ROW -> applyLookAndFeel(prefs)
+            Prefs.HAPTICS, Prefs.KEY_HEIGHT, Prefs.NUMBER_ROW, Prefs.SWIPE_VISUALS -> applyLookAndFeel(prefs)
         }
     }
 
@@ -147,6 +148,8 @@ class WeftKeyboardService :
         voice = SystemVoiceInput(this, voiceListener)
         learned = LearnedStore.get(this) // shared with Settings › Learned words
         typing = TypingController(learned)
+        // Swipes the user kept teach the decoder their aim and their picks (on the phone only).
+        typing.onSwipeKept = { kept, first, xs, ys -> swipeDecoder?.learnFrom(kept, first, xs, ys) }
         clipboard = getSystemService(ClipboardManager::class.java)
         clipboard.addPrimaryClipChangedListener(clipListener)
         Prefs.of(this).registerOnSharedPreferenceChangeListener(prefsListener)
@@ -357,6 +360,7 @@ class WeftKeyboardService :
         state.haptics = prefs.haptics()
         state.keyHeight = prefs.keyHeight()
         state.numberRow = prefs.numberRow()
+        state.swipeVisuals = prefs.swipeVisuals()
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
@@ -443,7 +447,8 @@ class WeftKeyboardService :
             val words = decoder.decode(xs, ys, previous, before = before).map { applyShift(it.word) }
             if (words.isEmpty()) return
             state.message = null
-            typing.onSwipe(editor, words)
+            state.swipePreview = null
+            typing.onSwipe(editor, words, xs, ys)
             if (state.shift == ShiftState.Once) state.shift = ShiftState.Off
             return
         }
@@ -451,6 +456,7 @@ class WeftKeyboardService :
             val words = withContext(Dispatchers.Default) { decoder.decode(xs, ys, previous, before = before) }
                 .map { applyShift(it.word) }
             if (words.isNotEmpty()) {
+                state.swipePreview = words[0]
                 state.suggestions = listOf(
                     words.getOrNull(1)?.let { SuggestionChip(it) },
                     SuggestionChip(words[0], ChipStyle.Autocorrect),

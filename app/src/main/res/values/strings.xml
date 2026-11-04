@@ -69,10 +69,12 @@
     <string name="settings_autocorrect_body">Fix typos when you press space. Press delete right after to undo.</string>
     <string name="settings_emoji_suggestions">Emoji suggestions</string>
     <string name="settings_emoji_suggestions_body">Offer an emoji in the strip when a word names one, like 🍕 for “pizza”. Tap it to add it after the word.</string>
+    <string name="settings_swipe_visuals">Swipe trail and preview</string>
+    <string name="settings_swipe_visuals_body">Show a trail behind your finger, light up the letters it crosses, and show the best guess in a bubble above it. Turning it off doesn\'t change how swipes are recognized.</string>
     <string name="settings_swipe">Swipe typing</string>
     <string name="settings_swipe_body">Slide across the letters to type a word, lifting between words. Spaces are added for you; delete removes the whole word.</string>
     <string name="settings_learn">Learn from my typing</string>
-    <string name="settings_learn_body">Remember new words, the words you use most and which words you type together, so suggestions and swipe fit how you write. Undoing a correction keeps that word as you typed it. Stored only on this device, never in password, incognito, email or web address fields.</string>
+    <string name="settings_learn_body">Remember new words, the words you use most, which words you type together and how you swipe (where your thumb lands, and which of the guesses you pick), so suggestions and swipe fit you. Undoing a correction keeps that word as you typed it. Stored only on this device, never in password, incognito, email or web address fields.</string>
     <string name="settings_clear_learned">Clear</string>
     <string name="settings_manage_learned">View and edit</string>
     <string name="learned_title">Learned words</string>

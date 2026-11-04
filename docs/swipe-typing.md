@@ -66,13 +66,17 @@ frequency and context decide; in real typing the previous two words help.
 
 Come back to these, roughly in order of value:
 
-1. **Learn from real use.** `SwipeSimulator` now imitates human swipes, but
-   every thumb differs. Keep on-device-only (nothing leaves the phone) stats,
-   e.g. which alternative the user picks, to tune `Tuning` per user.
-2. **Better context.** Rank ambiguous pairs (for/four, to/too) with stronger
-   next-word data. *Partly done:* the decoder now adds the user's own word
-   frequency and word pairs (`LearnedWords.boost` / `pairBoost`); longer
-   context (two words back) would help more.
+1. ~~**Learn from real use.**~~ *Done (Nov 2026), on the phone only:* once the
+   user moves on from a swipe, `SwipeDecoder.learnFrom` records where it started
+   and ended relative to the word's first and last letters (a running average
+   the decoder subtracts once there are 15+ swipes), and which guess they picked
+   instead of the first one (that word wins next time). On simulated swipes from
+   a thumb that lands a third of a key low and left, top-1 goes from 80.6% to
+   91.2% after 150 swipes. Still open: adapting the radii or shape weight to a
+   user's sloppiness.
+2. ~~**Better context.**~~ *Done:* candidates are ranked with the dictionary's
+   word pairs and three-word context (two words back), plus the user's own word
+   frequency and pairs (`LearnedWords.boost` / `pairBoost`).
 3. **Machine-learning decoder.** Train a small model (e.g. a GRU or
    transformer over the point sequence) on synthetic swipes generated from the
    dictionary plus any real data, export to ONNX or LiteRT, and run it on
@@ -82,7 +86,8 @@ Come back to these, roughly in order of value:
    the decoder currently ignores timing.
 5. **Swipe across space.** Multiple words in one gesture, and swiping on the
    symbols page.
-6. **Look and feel.** Fading, tapering trail; highlight keys the path crosses;
-   floating preview of the best word near the finger.
+6. ~~**Look and feel.**~~ *Done:* the trail tapers and fades toward its tail,
+   letters light up as the path crosses them, and a bubble above the finger
+   shows the best guess (Settings › Swipe trail and preview turns these off).
 7. **More languages and layouts.** The decoder only needs key centres, so it
    works for any layout once dictionaries exist (see the roadmap).
