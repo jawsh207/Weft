@@ -348,6 +348,7 @@ class WeftKeyboardService :
         typing.emojiFor = if (prefs.emojiSuggestions()) ::emojiFor else null
         typing.autocorrectEnabled = policy.autocorrect
         typing.learningEnabled = policy.learning
+        typing.capitalizeI = isText && !isPassword && !technical
         swipeAllowed = policy.swipe
         state.swipeEnabled = swipeAllowed && swipeDecoder != null
     }

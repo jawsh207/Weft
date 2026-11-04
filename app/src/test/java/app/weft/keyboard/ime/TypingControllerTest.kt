@@ -340,4 +340,56 @@ class TypingControllerTest {
         type("hello")
         assertFalse(controller.publish(controller.compute(controller.context(editor))).any { it?.style == ChipStyle.Emoji })
     }
+
+    // --- "i" → "I" -----------------------------------------------------------------------------
+
+    @Test
+    fun capitalizesIEvenWithAutocorrectOff() {
+        controller.autocorrectEnabled = false
+        type("i")
+        controller.onSeparator(editor, " ")
+        type("i'm")
+        controller.onSeparator(editor, " ")
+        assertEquals("I I'm ", editor.toString())
+    }
+
+    @Test
+    fun undoingIOnlyCountsOnce() {
+        type("i")
+        controller.onSeparator(editor, " ")
+        assertTrue(controller.onBackspace(editor))
+        assertEquals("i ", editor.toString())
+        assertFalse(learned.isKeptAsTyped("i"))
+        type("i")
+        controller.onSeparator(editor, " ")
+        assertEquals("i I ", editor.toString())
+    }
+
+    @Test
+    fun capitalizesIEvenIfItWasKeptAsTypedBefore() {
+        learned.keepAsTyped("i") // from earlier versions, which remembered an undo
+        type("i")
+        controller.onSeparator(editor, " ")
+        assertEquals("I ", editor.toString())
+    }
+
+    @Test
+    fun stripShowsCapitalIInTheMiddle() {
+        controller.autocorrectEnabled = false
+        type("i")
+        val chips = controller.publish(controller.compute(controller.context(editor)))
+        assertEquals(SuggestionChip("I", ChipStyle.Autocorrect), chips[1])
+    }
+
+    @Test
+    fun leavesIAloneWhereCapitalizingIsOff() {
+        controller.capitalizeI = false
+        controller.autocorrectEnabled = false
+        type("i")
+        controller.onSeparator(editor, " ")
+        assertEquals("i ", editor.toString())
+        assertEquals(null, TypingController.capitalI("id"))
+        assertEquals("I'd", TypingController.capitalI("i'd"))
+        assertEquals(null, TypingController.capitalI("I"))
+    }
 }

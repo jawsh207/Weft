@@ -49,6 +49,13 @@ class TypingController(private val learned: LearnedWords) {
     /** False in fields that ask for no personalized learning (e.g. incognito). */
     var learningEnabled = true
 
+    /**
+     * Capitalize "i" ("i'm", "i'll", …) when the word ends. A grammar rule like the
+     * capital at the start of a sentence, not a guess at a typo, so it works even
+     * where autocorrect is off. False in passwords, emails and web addresses.
+     */
+    var capitalizeI = true
+
     /** The emoji a word names, in the user's skin tone, or null (set by the keyboard; off in settings). */
     @Volatile
     var emojiFor: ((String) -> String?)? = null
@@ -142,12 +149,13 @@ class TypingController(private val learned: LearnedWords) {
         }
         if (result.typed.isEmpty()) return centered(words.map { SuggestionChip(it) })
 
-        val auto = result.autocorrect?.takeIf { autocorrectEnabled && !isKeptAsTyped(result.typed) }
+        val auto = capitalI(result.typed)?.takeIf { capitalizeI }
+            ?: result.autocorrect?.takeIf { autocorrectEnabled && !isKeptAsTyped(result.typed) }?.word
         if (auto != null) {
-            val alt = words.firstOrNull { it != auto.word }?.let { SuggestionChip(it) }
+            val alt = words.firstOrNull { it != auto }?.let { SuggestionChip(it) }
             return listOf(
                 SuggestionChip(result.typed, ChipStyle.Verbatim),
-                SuggestionChip(auto.word, ChipStyle.Autocorrect),
+                SuggestionChip(auto, ChipStyle.Autocorrect),
                 alt,
             )
         }
@@ -265,7 +273,9 @@ class TypingController(private val learned: LearnedWords) {
             editor.deleteBefore(tail.length)
             editor.insert(c.original + c.separator)
         }
-        keepAsTyped(c.original) // don't fight the user on this word again
+        // Don't fight the user on this word again; but "i" → "I" is grammar, so undoing
+        // it only counts this once (it's often just backing up to type "I'm").
+        if (capitalI(c.original) == null) keepAsTyped(c.original)
         learn(c.original)
         if (learningEnabled) {
             forgetPhrase(c.corrected, c.previous)
@@ -349,6 +359,7 @@ class TypingController(private val learned: LearnedWords) {
     // --- Helpers ---------------------------------------------------------------------------
 
     private fun autocorrectFor(ctx: WordContext): String? {
+        if (capitalizeI) capitalI(ctx.fragment)?.let { return it }
         if (!autocorrectEnabled || !suggestionsEnabled) return null
         if (ctx.fragment.isEmpty() || isKeptAsTyped(ctx.fragment)) return null
         val s = suggester ?: return null
@@ -400,6 +411,12 @@ class TypingController(private val learned: LearnedWords) {
 
     companion object {
         const val CONTEXT_CHARS = 64
+
+        private val LOWER_I = Regex("i(?:['’](?:m|ll|ve|d))?")
+
+        /** "I", "I'm", "I'll", "I've", "I'd" for their lowercase forms; null for anything else. */
+        fun capitalI(word: String): String? =
+            if (LOWER_I.matches(word)) "I" + word.substring(1) else null
         private val ATTACHING_PUNCTUATION = setOf(".", ",", "!", "?", ";", ":")
 
         /** Characters a swiped word can follow without a space: "(word", "\"word". */
