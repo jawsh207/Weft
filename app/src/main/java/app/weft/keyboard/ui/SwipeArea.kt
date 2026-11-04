@@ -197,7 +197,11 @@ internal fun SwipeArea(rows: List<KeyRow>, state: KeyboardState, handlers: KeyHa
             val preview = state.swipePreview
             val finger = trail.lastOrNull()
             if (swiping && preview != null && finger != null) {
-                PreviewBubble(preview, finger, rowHeight)
+                // Its own layer, exactly the swipe area's size: the bubble can never
+                // change how big the keyboard is (it used to stretch it to the whole screen).
+                Box(Modifier.matchParentSize()) {
+                    PreviewBubble(preview, finger, rowHeight)
+                }
             }
         }
     }
@@ -209,7 +213,8 @@ private fun PreviewBubble(word: String, finger: Offset, rowHeight: Float) {
     Surface(
         modifier = Modifier.layout { measurable, constraints ->
             val placeable = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
-            layout(constraints.maxWidth, constraints.maxHeight) {
+            // Takes no space itself: it's only drawn, at the finger.
+            layout(0, 0) {
                 val x = (finger.x - placeable.width / 2f)
                     .coerceIn(0f, (constraints.maxWidth - placeable.width).toFloat().coerceAtLeast(0f))
                 // Above the finger, clear of the thumb; it may rise over the suggestion strip.
