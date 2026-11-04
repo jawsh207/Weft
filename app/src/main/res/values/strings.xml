@@ -85,7 +85,7 @@
     <string name="settings_autocorrect_body">Fix typos when you press space. Press delete right after to undo.</string>
     <string name="settings_emoji_suggestions">Emoji suggestions</string>
     <string name="settings_emoji_suggestions_body">Offer an emoji in the strip when a word names one, like 🍕 for “pizza”. Tap it to add it after the word.</string>
-    <string name="settings_swipe_visuals">Swipe trail and preview</string>
+    <string name="settings_swipe_visuals">Enhanced visuals</string>
     <string name="settings_swipe_visuals_body">A trail that tapers toward its tail, and letters that light up as you cross them. Off shows a plain trail. Either way, swipes are recognized the same.</string>
     <string name="settings_swipe">Swipe typing</string>
     <string name="settings_swipe_body">Slide across the letters to type a word, lifting between words. Spaces are added for you; delete removes the whole word.</string>
