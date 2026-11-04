@@ -27,7 +27,10 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
@@ -67,9 +70,10 @@ private class Glow(val rect: Rect, var at: Long)
  * see their touch cancelled) and the decoder's best guess previews in the
  * suggestion strip.
  *
- * With swipe visuals on (the default; see settings), a trail follows the
- * finger, tapering and fading toward its tail; letters light up briefly as the
- * path crosses them; and a bubble above the finger shows the best guess.
+ * With swipe visuals on (the default; see settings), the trail tapers and fades
+ * toward its tail, letters light up briefly as the path crosses them, and a
+ * bubble above the finger shows the best guess. With them off, a plain trail
+ * follows the finger, as before.
  */
 @Composable
 internal fun SwipeArea(rows: List<KeyRow>, state: KeyboardState, handlers: KeyHandlers) {
@@ -86,6 +90,7 @@ internal fun SwipeArea(rows: List<KeyRow>, state: KeyboardState, handlers: KeyHa
     val trailColor = cs.primary
     val glowColor = cs.primary
     val trailWidth = with(density) { 7.dp.toPx() }
+    val plainWidth = with(density) { 6.dp.toPx() }
     val rowHeight = with(density) { RowHeight.toPx() }
     val gap = with(density) { KeyGap.toPx() }
     val corner = with(density) { 12.dp.toPx() }
@@ -154,7 +159,6 @@ internal fun SwipeArea(rows: List<KeyRow>, state: KeyboardState, handlers: KeyHa
                     change.consume() // the key under the finger won't type
                     add(p)
                     trail += p
-                    if (trail.size > TRAIL_POINTS) trail.removeRange(0, trail.size - TRAIL_POINTS)
                     glowAt(p)
                     val t = SystemClock.uptimeMillis()
                     if (t - lastPreview >= PREVIEW_MS) {
@@ -166,7 +170,21 @@ internal fun SwipeArea(rows: List<KeyRow>, state: KeyboardState, handlers: KeyHa
         },
     ) {
         Column { rows.forEach { row -> KeyRowView(row, state, handlers) } }
-        if (visuals) {
+        if (!visuals) {
+            // Plain trail: the whole path, fading out when the finger lifts.
+            Canvas(Modifier.matchParentSize()) {
+                if (trail.size < 2) return@Canvas
+                val path = Path().apply {
+                    moveTo(trail[0].x, trail[0].y)
+                    for (i in 1 until trail.size) lineTo(trail[i].x, trail[i].y)
+                }
+                drawPath(
+                    path,
+                    color = trailColor.copy(alpha = 0.85f * fade.value),
+                    style = Stroke(width = plainWidth, cap = StrokeCap.Round, join = StrokeJoin.Round),
+                )
+            }
+        } else {
             Canvas(Modifier.matchParentSize()) {
                 // Letters the path crossed, fading out.
                 for (g in glows) {
@@ -179,15 +197,16 @@ internal fun SwipeArea(rows: List<KeyRow>, state: KeyboardState, handlers: KeyHa
                         cornerRadius = CornerRadius(corner, corner),
                     )
                 }
-                // The trail: thin and faint at the tail, full at the finger.
-                val n = trail.size
+                // The trail: the latest stretch only, thin and faint at the tail, full at the finger.
+                val from = (trail.size - TRAIL_POINTS).coerceAtLeast(0)
+                val n = trail.size - from
                 if (n >= 2) {
                     for (i in 1 until n) {
                         val t = i / (n - 1).toFloat()
                         drawLine(
                             color = trailColor.copy(alpha = (0.12f + 0.78f * t) * fade.value),
-                            start = trail[i - 1],
-                            end = trail[i],
+                            start = trail[from + i - 1],
+                            end = trail[from + i],
                             strokeWidth = trailWidth * (0.3f + 0.7f * t),
                             cap = StrokeCap.Round,
                         )

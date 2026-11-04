@@ -46,6 +46,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import app.weft.keyboard.ime.LearnedStore
 import kotlinx.coroutines.launch
@@ -87,7 +95,24 @@ class SettingsActivity : ComponentActivity() {
         val requestMic = intent.getBooleanExtra(EXTRA_REQUEST_MIC, false)
         setContent {
             SystemTheme {
-                SetupScreen(requestMicOnLaunch = requestMic)
+                // The main page, or one section of settings opened from it.
+                var page by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
+                BackHandler(enabled = page != null) { page = null }
+                AnimatedContent(
+                    targetState = page,
+                    transitionSpec = {
+                        val forward = targetState != null
+                        (slideInHorizontally { if (forward) it / 4 else -it / 4 } + fadeIn()) togetherWith
+                            (slideOutHorizontally { if (forward) -it / 4 else it / 4 } + fadeOut())
+                    },
+                    label = "settings",
+                ) { current ->
+                    if (current == null) {
+                        SetupScreen(requestMicOnLaunch = requestMic, onOpen = { page = it })
+                    } else {
+                        SettingsPageScreen(current, onBack = { page = null })
+                    }
+                }
             }
         }
     }
@@ -99,7 +124,7 @@ class SettingsActivity : ComponentActivity() {
 }
 
 @Composable
-private fun SetupScreen(requestMicOnLaunch: Boolean) {
+private fun SetupScreen(requestMicOnLaunch: Boolean, onOpen: (SettingsPage) -> Unit) {
     val context = LocalContext.current
     val imm = remember { context.getSystemService(InputMethodManager::class.java) }
     val imeId = remember {
@@ -142,7 +167,7 @@ private fun SetupScreen(requestMicOnLaunch: Boolean) {
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             MediumFlexibleTopAppBar(
-                title = { Text(stringResource(R.string.setup_title)) },
+                title = { Text(stringResource(R.string.settings_title)) },
                 scrollBehavior = scrollBehavior,
             )
         },
@@ -159,7 +184,9 @@ private fun SetupScreen(requestMicOnLaunch: Boolean) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            StepCard(
+            // Setup steps stay at the top until they're all done.
+            val allSet = enabled && selected && (micGranted || !engineAvailable)
+            if (!allSet) StepCard(
                 number = 1,
                 title = stringResource(R.string.setup_enable_title),
                 body = stringResource(R.string.setup_enable_body),
@@ -169,7 +196,7 @@ private fun SetupScreen(requestMicOnLaunch: Boolean) {
                     context.startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
                 },
             )
-            StepCard(
+            if (!allSet) StepCard(
                 number = 2,
                 title = stringResource(R.string.setup_select_title),
                 body = stringResource(R.string.setup_select_body),
@@ -178,7 +205,7 @@ private fun SetupScreen(requestMicOnLaunch: Boolean) {
                 actionLabel = stringResource(R.string.setup_select_action),
                 onAction = { imm.showInputMethodPicker() },
             )
-            StepCard(
+            if (!allSet) StepCard(
                 number = 3,
                 title = stringResource(R.string.setup_mic_title),
                 body = stringResource(
@@ -190,17 +217,7 @@ private fun SetupScreen(requestMicOnLaunch: Boolean) {
                 onAction = { micLauncher.launch(Manifest.permission.RECORD_AUDIO) },
             )
 
-            TypingSettings()
-            KeysSettings()
-            DictionaryInfo()
-            SectionCard(stringResource(R.string.settings_emoji_title)) {
-                Text(
-                    stringResource(R.string.settings_emoji_body),
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            SettingsMenu(onOpen)
 
             Spacer(Modifier.height(8.dp))
             Text(
@@ -275,33 +292,75 @@ private fun StepCard(
 }
 
 @Composable
-private fun SectionCard(title: String, content: @Composable () -> Unit) {
+internal fun SectionCard(title: String?, content: @Composable () -> Unit) {
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
         shape = MaterialTheme.shapes.extraLarge,
     ) {
         Column(Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
-            Text(
-                title,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
+            if (title != null) {
+                Text(
+                    title,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
             content()
         }
     }
 }
 
+/** Settings › Typing: what the suggestion strip does. */
 @Composable
-private fun TypingSettings() {
+internal fun TypingSection() {
     val context = LocalContext.current
     val prefs = remember { Prefs.of(context) }
     var suggestions by remember { mutableStateOf(prefs.getBoolean(Prefs.SHOW_SUGGESTIONS, true)) }
     var autocorrect by remember { mutableStateOf(prefs.getBoolean(Prefs.AUTOCORRECT, true)) }
-    var learn by remember { mutableStateOf(prefs.getBoolean(Prefs.LEARN_WORDS, true)) }
-    var swipe by remember { mutableStateOf(prefs.getBoolean(Prefs.SWIPE, true)) }
     var emoji by remember { mutableStateOf(prefs.emojiSuggestions()) }
-    var swipeVisuals by remember { mutableStateOf(prefs.swipeVisuals()) }
+    SectionCard(null) {
+        SwitchRow(stringResource(R.string.settings_suggestions), stringResource(R.string.settings_suggestions_body), suggestions) {
+            suggestions = it
+            prefs.edit { putBoolean(Prefs.SHOW_SUGGESTIONS, it) }
+        }
+        SwitchRow(stringResource(R.string.settings_autocorrect), stringResource(R.string.settings_autocorrect_body), autocorrect, enabled = suggestions) {
+            autocorrect = it
+            prefs.edit { putBoolean(Prefs.AUTOCORRECT, it) }
+        }
+        SwitchRow(stringResource(R.string.settings_emoji_suggestions), stringResource(R.string.settings_emoji_suggestions_body), emoji, enabled = suggestions) {
+            emoji = it
+            prefs.edit { putBoolean(Prefs.EMOJI_SUGGESTIONS, it) }
+        }
+    }
+}
+
+/** Settings › Swipe typing. */
+@Composable
+internal fun SwipeSection() {
+    val context = LocalContext.current
+    val prefs = remember { Prefs.of(context) }
+    var swipe by remember { mutableStateOf(prefs.getBoolean(Prefs.SWIPE, true)) }
+    var visuals by remember { mutableStateOf(prefs.swipeVisuals()) }
+    SectionCard(null) {
+        SwitchRow(stringResource(R.string.settings_swipe), stringResource(R.string.settings_swipe_body), swipe) {
+            swipe = it
+            prefs.edit { putBoolean(Prefs.SWIPE, it) }
+        }
+        SwitchRow(stringResource(R.string.settings_swipe_visuals), stringResource(R.string.settings_swipe_visuals_body), visuals, enabled = swipe) {
+            visuals = it
+            prefs.edit { putBoolean(Prefs.SWIPE_VISUALS, it) }
+        }
+    }
+    Note(stringResource(R.string.settings_swipe_learning_note))
+}
+
+/** Settings › Learning: what Weft learns from typing, and managing it. */
+@Composable
+internal fun LearningSection() {
+    val context = LocalContext.current
+    val prefs = remember { Prefs.of(context) }
+    var learn by remember { mutableStateOf(prefs.getBoolean(Prefs.LEARN_WORDS, true)) }
     val learned = remember { LearnedStore.get(context) }
     val scope = rememberCoroutineScope()
     var learnedCount by remember { mutableIntStateOf(0) }
@@ -317,46 +376,20 @@ private fun TypingSettings() {
         withContext(Dispatchers.IO) { learned.ensureLoaded() }
         learnedCount = learned.size
         pairCount = learned.pairCount
-        hasAny = learned.size > 0 || learned.pairCount > 0 ||
+        hasAny = learned.size > 0 || learned.pairCount > 0 || learned.swipeSampleCount > 0 ||
             learned.keptAsTypedWords().isNotEmpty() || learned.removedWords().isNotEmpty()
     }
-
-    SectionCard(stringResource(R.string.settings_typing_title)) {
-        SwitchRow(stringResource(R.string.settings_suggestions), stringResource(R.string.settings_suggestions_body), suggestions) {
-            suggestions = it
-            prefs.edit { putBoolean(Prefs.SHOW_SUGGESTIONS, it) }
-        }
-        SwitchRow(stringResource(R.string.settings_autocorrect), stringResource(R.string.settings_autocorrect_body), autocorrect, enabled = suggestions) {
-            autocorrect = it
-            prefs.edit { putBoolean(Prefs.AUTOCORRECT, it) }
-        }
-        SwitchRow(stringResource(R.string.settings_emoji_suggestions), stringResource(R.string.settings_emoji_suggestions_body), emoji, enabled = suggestions) {
-            emoji = it
-            prefs.edit { putBoolean(Prefs.EMOJI_SUGGESTIONS, it) }
-        }
-        SwitchRow(stringResource(R.string.settings_swipe), stringResource(R.string.settings_swipe_body), swipe) {
-            swipe = it
-            prefs.edit { putBoolean(Prefs.SWIPE, it) }
-        }
-        SwitchRow(stringResource(R.string.settings_swipe_visuals), stringResource(R.string.settings_swipe_visuals_body), swipeVisuals, enabled = swipe) {
-            swipeVisuals = it
-            prefs.edit { putBoolean(Prefs.SWIPE_VISUALS, it) }
-        }
+    SectionCard(null) {
         SwitchRow(stringResource(R.string.settings_learn), stringResource(R.string.settings_learn_body), learn) {
             learn = it
             prefs.edit { putBoolean(Prefs.LEARN_WORDS, it) }
         }
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                stringResource(R.string.settings_learned_count, learnedCount, pairCount),
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        Text(
+            stringResource(R.string.settings_learned_count, learnedCount, pairCount),
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Row(
             Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
@@ -378,16 +411,15 @@ private fun TypingSettings() {
     }
 }
 
+/** Settings › Keys and feel. */
 @Composable
-private fun KeysSettings() {
+internal fun KeysSection() {
     val context = LocalContext.current
     val prefs = remember { Prefs.of(context) }
     var haptics by remember { mutableStateOf(prefs.haptics()) }
     var height by remember { mutableStateOf(prefs.keyHeight()) }
     var numberRow by remember { mutableStateOf(prefs.numberRow()) }
-    var offline by remember { mutableStateOf(prefs.voiceOffline()) }
-
-    SectionCard(stringResource(R.string.settings_keys_title)) {
+    SectionCard(null) {
         ChoiceRow(
             title = stringResource(R.string.settings_haptics),
             options = HapticLevel.entries,
@@ -427,11 +459,59 @@ private fun KeysSettings() {
             numberRow = it
             prefs.edit { putBoolean(Prefs.NUMBER_ROW, it) }
         }
+    }
+}
+
+/** Settings › Voice input. */
+@Composable
+internal fun VoiceSection() {
+    val context = LocalContext.current
+    val prefs = remember { Prefs.of(context) }
+    var offline by remember { mutableStateOf(prefs.voiceOffline()) }
+    SectionCard(null) {
         SwitchRow(stringResource(R.string.settings_voice_offline), stringResource(R.string.settings_voice_offline_body), offline) {
             offline = it
             prefs.edit { putBoolean(Prefs.VOICE_OFFLINE, it) }
         }
+        Row(
+            Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 8.dp),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            OutlinedButton(
+                onClick = {
+                    // The system's "Voice input" / default speech engine screen; not every phone has it.
+                    runCatching { context.startActivity(Intent(Settings.ACTION_VOICE_INPUT_SETTINGS)) }
+                        .recoverCatching { context.startActivity(Intent(Settings.ACTION_SETTINGS)) }
+                },
+            ) { Text(stringResource(R.string.settings_voice_engine)) }
+        }
     }
+    Note(stringResource(R.string.settings_voice_note))
+}
+
+/** Settings › About: where the dictionary and emoji data come from. */
+@Composable
+internal fun AboutSection() {
+    DictionaryInfo()
+    SectionCard(stringResource(R.string.settings_emoji_title)) {
+        Text(
+            stringResource(R.string.settings_emoji_body),
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** A short explanation under a group of settings. */
+@Composable
+private fun Note(text: String) {
+    Text(
+        text,
+        modifier = Modifier.padding(horizontal = 8.dp),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 /** A title over a row of connected buttons, one of which is chosen. */

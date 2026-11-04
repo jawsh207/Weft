@@ -49,6 +49,22 @@
     <string name="setup_try_hint">Type here</string>
 
     <string name="settings_typing_title">Typing</string>
+    <string name="settings_title">Weft</string>
+    <string name="settings_page_typing">Typing</string>
+    <string name="settings_page_typing_summary">Suggestions, autocorrect, emoji suggestions</string>
+    <string name="settings_page_swipe">Swipe typing</string>
+    <string name="settings_page_swipe_summary">Swipe on or off, trail and preview</string>
+    <string name="settings_page_learning">Learning</string>
+    <string name="settings_page_learning_summary">Words, pairs and swipe habits Weft has learned</string>
+    <string name="settings_page_keys">Keys and feel</string>
+    <string name="settings_page_keys_summary">Vibration, key height, number row</string>
+    <string name="settings_page_voice">Voice input</string>
+    <string name="settings_page_voice_summary">Speech engine and offline voice</string>
+    <string name="settings_page_about">About</string>
+    <string name="settings_page_about_summary">Dictionary sources, emoji data</string>
+    <string name="settings_swipe_learning_note">Swipe learns where your thumb tends to land and which look-alike word you mean. You\'ll find it, and can clear it, under Learning.</string>
+    <string name="settings_voice_engine">Choose speech engine</string>
+    <string name="settings_voice_note">Weft always uses the speech engine chosen in your phone\'s settings. Punctuation goes in only when you say it (\u201Cperiod\u201D, \u201Ccomma\u201D, \u201Cquestion mark\u201D, \u201Cnew line\u201D…).</string>
     <string name="settings_keys_title">Keys and voice</string>
     <string name="settings_haptics">Vibration on key press</string>
     <string name="settings_haptics_off">Off</string>
@@ -70,7 +86,7 @@
     <string name="settings_emoji_suggestions">Emoji suggestions</string>
     <string name="settings_emoji_suggestions_body">Offer an emoji in the strip when a word names one, like 🍕 for “pizza”. Tap it to add it after the word.</string>
     <string name="settings_swipe_visuals">Swipe trail and preview</string>
-    <string name="settings_swipe_visuals_body">Show a trail behind your finger, light up the letters it crosses, and show the best guess in a bubble above it. Turning it off doesn\'t change how swipes are recognized.</string>
+    <string name="settings_swipe_visuals_body">A trail that tapers toward its tail, letters that light up as you cross them, and the best guess in a bubble above your finger. Off shows a plain trail. Either way, swipes are recognized the same.</string>
     <string name="settings_swipe">Swipe typing</string>
     <string name="settings_swipe_body">Slide across the letters to type a word, lifting between words. Spaces are added for you; delete removes the whole word.</string>
     <string name="settings_learn">Learn from my typing</string>
