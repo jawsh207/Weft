@@ -447,7 +447,6 @@ class WeftKeyboardService :
             val words = decoder.decode(xs, ys, previous, before = before).map { applyShift(it.word) }
             if (words.isEmpty()) return
             state.message = null
-            state.swipePreview = null
             typing.onSwipe(editor, words, xs, ys)
             if (state.shift == ShiftState.Once) state.shift = ShiftState.Off
             return
@@ -456,7 +455,6 @@ class WeftKeyboardService :
             val words = withContext(Dispatchers.Default) { decoder.decode(xs, ys, previous, before = before) }
                 .map { applyShift(it.word) }
             if (words.isNotEmpty()) {
-                state.swipePreview = words[0]
                 state.suggestions = listOf(
                     words.getOrNull(1)?.let { SuggestionChip(it) },
                     SuggestionChip(words[0], ChipStyle.Autocorrect),

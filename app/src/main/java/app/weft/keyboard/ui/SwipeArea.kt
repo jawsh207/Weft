@@ -7,11 +7,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -33,18 +29,14 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import app.weft.keyboard.ime.KeyboardState
 import app.weft.keyboard.layout.CharKey
 import app.weft.keyboard.layout.KeyRow
 import kotlinx.coroutines.launch
 import kotlin.math.hypot
-import kotlin.math.roundToInt
 
 /** Must match KeyGeometry's default row aspect, so swipes and key centers line up. */
 private const val ROW_ASPECT = 1.45f
@@ -68,12 +60,11 @@ private class Glow(val rect: Rect, var at: Long)
  * The letter rows with swipe typing on top. Taps still go to the keys; once a
  * finger starting on a letter moves far enough, the swipe takes over (the keys
  * see their touch cancelled) and the decoder's best guess previews in the
- * suggestion strip.
+ * suggestion strip's middle word.
  *
  * With swipe visuals on (the default; see settings), the trail tapers and fades
- * toward its tail, letters light up briefly as the path crosses them, and a
- * bubble above the finger shows the best guess. With them off, a plain trail
- * follows the finger, as before.
+ * toward its tail and letters light up briefly as the path crosses them. With
+ * them off, a plain trail follows the finger, as before.
  */
 @Composable
 internal fun SwipeArea(rows: List<KeyRow>, state: KeyboardState, handlers: KeyHandlers) {
@@ -213,46 +204,7 @@ internal fun SwipeArea(rows: List<KeyRow>, state: KeyboardState, handlers: KeyHa
                     }
                 }
             }
-            val preview = state.swipePreview
-            val finger = trail.lastOrNull()
-            if (swiping && preview != null && finger != null) {
-                // Its own layer, exactly the swipe area's size: the bubble can never
-                // change how big the keyboard is (it used to stretch it to the whole screen).
-                Box(Modifier.matchParentSize()) {
-                    PreviewBubble(preview, finger, rowHeight)
-                }
-            }
         }
-    }
-}
-
-/** The best guess in a bubble above the finger, kept inside the keyboard's width. */
-@Composable
-private fun PreviewBubble(word: String, finger: Offset, rowHeight: Float) {
-    Surface(
-        modifier = Modifier.layout { measurable, constraints ->
-            val placeable = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
-            // Takes no space itself: it's only drawn, at the finger.
-            layout(0, 0) {
-                val x = (finger.x - placeable.width / 2f)
-                    .coerceIn(0f, (constraints.maxWidth - placeable.width).toFloat().coerceAtLeast(0f))
-                // Above the finger, clear of the thumb; it may rise over the suggestion strip.
-                val y = finger.y - rowHeight * 1.1f - placeable.height
-                placeable.place(IntOffset(x.roundToInt(), y.roundToInt()))
-            }
-        },
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.inverseSurface,
-        contentColor = MaterialTheme.colorScheme.inverseOnSurface,
-        shadowElevation = 3.dp,
-    ) {
-        Text(
-            word,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-        )
     }
 }
 

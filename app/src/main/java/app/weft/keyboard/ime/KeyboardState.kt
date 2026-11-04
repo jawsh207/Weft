@@ -55,8 +55,6 @@ class KeyboardState {
     /** Swipe trail, lit letters and the floating best guess (Settings › Swipe trail and preview). */
     var swipeVisuals by mutableStateOf(true)
 
-    /** The decoder's best guess while a swipe is in progress, for the bubble by the finger. */
-    var swipePreview by mutableStateOf<String?>(null)
 
     var voiceAvailable by mutableStateOf(false)
     var listening by mutableStateOf(false)
