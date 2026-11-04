@@ -92,7 +92,7 @@ def main() -> None:
     cmd = [sys.executable, str(HERE / "build_dict.py"),
            "--locale", locale,
            "--description", config.get("description", locale),
-           "--out", str(ASSETS / f"main_{locale}.ekd")]
+           "--out", str(ASSETS / f"main_{locale}.ekdz")]
     if paths.get("aosp"):
         cmd += ["--aosp", str(paths["aosp"])]
     if paths.get("subtitles"):

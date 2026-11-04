@@ -10,9 +10,11 @@ python3 tools/dictgen/make_dict.py en_US
 ```
 
 This downloads the sources in `sources/en_US.json` into `cache/en_US/`
-(git-ignored), builds `app/src/main/assets/dictionaries/main_en_US.ekd` plus
-the UK, Canadian and Australian variants (`main_en_GB.ekd.gz`, …), and prints a
-summary. Rebuild the app afterwards. The Dictionary workflow does all of this on
+(git-ignored), builds `app/src/main/assets/dictionaries/main_en_US.ekdz` plus
+the UK, Canadian and Australian variants (`main_en_GB.ekdz`, …), and prints a
+summary. `.ekdz` is a gzipped `.ekd`; the app unpacks each once, on first use.
+(Not `.ekd.gz`: Android's build tools unpack `.gz` assets, which undoes the
+saving.) Rebuild the app afterwards. The Dictionary workflow does all of this on
 GitHub and commits the results.
 
 Extra options are passed through to the builder, for example:
@@ -87,11 +89,20 @@ Copy `sources/en_US.json` to `sources/<locale>.json` and point it at that
 language's files (AOSP has many; FrequencyWords covers about 60 languages;
 Leipzig covers hundreds). Add a matching subtype in `res/xml/method.xml`.
 
-## File format (`.ekd`, version 2)
+## File format (`.ekd`, version 3)
 
 A breadth-first trie stored as flat little-endian arrays, memory-mapped by the
-app with no parsing. Version 2 adds the three-word table; the app reads both.
-Regional variants ship gzipped and are unpacked on first use. See the docstring at the top of `build_dict.py` for the
+app with no parsing. Version 3 stores letters and child counts in the narrowest
+width that fits (one byte each for English), drops the parent array (a node's
+parent is found by binary search, since firstChild never decreases) and groups
+the three-word table by first word: about 30% smaller than version 2 with
+identical results and speed. The app still reads versions 1 and 2.
+
+Trimming content was measured too (Nov 2026) and not adopted: fewer words (120k
+or 100k) would make about a third of the dropped real words ("forbearing",
+"avow") get autocorrected into something else, and trimming word pairs or
+three-word entries saves only about 0.1 MB compressed each, at a small cost in
+predictions. See the docstring at the top of `build_dict.py` for the
 exact layout, and `predict/BinaryDictionary.kt` for the reader.
 
 ## Tests

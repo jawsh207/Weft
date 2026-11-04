@@ -26,7 +26,7 @@ class TypingBenchmarkTest {
     private fun find(vararg paths: String): File? = paths.map(::File).firstOrNull { it.exists() }
 
     private fun setUp(): Triple<Suggester, BinaryDictionary, File>? {
-        val dictFile = find("src/main/assets/dictionaries/main_en_US.ekd", "app/src/main/assets/dictionaries/main_en_US.ekd")
+        val dictFile = RealDictionary.file
         val data = find("../tools/bench/data", "tools/bench/data")
         if (dictFile == null || data == null || !File(data, "sentences_en.txt").exists()) return null
         val dict = BinaryDictionary.map(dictFile)

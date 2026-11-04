@@ -70,9 +70,9 @@
   "variants": {
     "file": "en_variants.tsv",
     "outputs": {
-      "GB": "main_en_GB.ekd.gz",
-      "CA": "main_en_CA.ekd.gz",
-      "AU": "main_en_AU.ekd.gz"
+      "GB": "main_en_GB.ekdz",
+      "CA": "main_en_CA.ekdz",
+      "AU": "main_en_AU.ekdz"
     }
   }
 }

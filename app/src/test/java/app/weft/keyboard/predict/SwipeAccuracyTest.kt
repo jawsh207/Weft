@@ -21,10 +21,7 @@ import kotlin.random.Random
  */
 class SwipeAccuracyTest {
 
-    private fun dictionaryFile(): File? = listOf(
-        "src/main/assets/dictionaries/main_en_US.ekd",
-        "app/src/main/assets/dictionaries/main_en_US.ekd",
-    ).map(::File).firstOrNull { it.exists() }
+    private fun dictionaryFile(): File? = RealDictionary.file
 
     @Test
     fun commonWordsDecodeCorrectly() {

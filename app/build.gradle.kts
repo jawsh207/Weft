@@ -57,7 +57,7 @@ android {
 
     // Dictionaries are memory-mapped straight from the APK, so keep them uncompressed.
     androidResources {
-        noCompress += "ekd"
+        noCompress += listOf("ekd", "ekdz") // .ekdz is already gzipped
     }
 
     testOptions {

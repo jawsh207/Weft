@@ -23,10 +23,12 @@ object DictionaryLoader {
      * The bundled dictionary for [locale] ("en_GB"), or US English if there's
      * none for it. Returns null if no dictionary has been built at all.
      *
-     * US English is stored uncompressed and memory-mapped straight from the APK.
-     * Other variants ship gzipped to keep the app small: the first time one is
-     * used it's unpacked into the app's private storage (once per app version)
-     * and mapped from there.
+     * Dictionaries ship gzipped as main_<locale>.ekdz to keep the app small. (Not
+     * .ekd.gz: Android's build tools quietly unpack .gz assets, which undid the
+     * saving.) The first time one is used it's unpacked into the app's private,
+     * non-backed-up storage, once per app version, and memory-mapped from there.
+     * An uncompressed main_<locale>.ekd in the APK is used directly if present.
+     * Call off the main thread: the first unpack takes a moment.
      */
     fun load(context: Context, locale: String): BinaryDictionary? =
         loadExact(context, locale) ?: if (locale != FALLBACK) loadExact(context, FALLBACK) else null
@@ -49,13 +51,16 @@ object DictionaryLoader {
             }.onFailure { Log.w(TAG, "Could not load $path", it) }
         }
         return runCatching { unpacked(context, locale)?.let { BinaryDictionary.map(it) } }
-            .onFailure { Log.w(TAG, "Could not load $path.gz", it) }
+            .onFailure { Log.w(TAG, "Could not load ${packedPath(locale)}", it) }
             .getOrNull()
     }
 
-    /** Unpacks dictionaries/main_<locale>.ekd.gz once per app version; null if there's no such asset. */
+    fun packedPath(locale: String) = "dictionaries/main_$locale.ekdz"
+
+    /** Unpacks dictionaries/main_<locale>.ekdz once per app version; null if there's no such asset. */
+    @Synchronized
     private fun unpacked(context: Context, locale: String): File? {
-        val gz = assetPath(locale) + ".gz"
+        val gz = packedPath(locale)
         val dir = File(context.noBackupFilesDir, "dictionaries")
         val version = context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime
         val file = File(dir, "main_${locale}_$version.ekd")

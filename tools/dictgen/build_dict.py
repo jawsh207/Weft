@@ -41,22 +41,25 @@ Inputs (all optional, but at least one frequency source is required):
 Only the Python standard library is used. Output is deterministic for the same
 inputs, which keeps F-Droid builds reproducible.
 
-Binary format (little endian), version 2:
+Binary format (little endian), version 3:
   "EKD1" | u32 version | u32 nodeCount | u32 bigramWords | u32 bigramEntries
-  | u32 trigramContexts | u32 trigramEntries            (version 2 only)
+  | u32 trigramWords | u32 trigramContexts | u32 trigramEntries | u32 layout
   | u32 metaLength | meta (UTF-8 JSON, padded to 4 bytes)
-  | i32 chars[nodeCount] | i32 firstChild[nodeCount] | i32 parent[nodeCount]
-  | i32 bigramWord[bigramWords] | i32 bigramStart[bigramWords + 1]
-  | i32 bigramNext[bigramEntries]
-  | u16 childCount[nodeCount]
-  | u8 freq[nodeCount] | u8 maxSub[nodeCount] | u8 flags[nodeCount]
-  | u8 bigramFreq[bigramEntries]
-  | padding to 4 bytes                                  (version 2 only from here)
-  | i32 trigramFirst[contexts] | i32 trigramSecond[contexts]   (sorted pairs)
-  | i32 trigramStart[contexts + 1] | i32 trigramNext[entries]
-  | u8 trigramFreq[entries]
+  then sections, each padded to 4 bytes:
+  i32 firstChild[nodeCount]                 (non-decreasing; see below)
+  i32 bigramWord[bigramWords] | i32 bigramStart[bigramWords + 1] | i32 bigramNext[bigramEntries]
+  i32 trigramWord[trigramWords] | i32 trigramWordStart[trigramWords + 1]   (first words)
+  i32 trigramSecond[trigramContexts] | i32 trigramStart[trigramContexts + 1]
+  i32 trigramNext[trigramEntries]
+  chars[nodeCount]       u8, u16 or i32 (layout bits 0-1: 0, 1, 2)
+  childCount[nodeCount]  u8 or u16 (layout bit 2)
+  u8 freq[nodeCount] | u8 maxSub[nodeCount] | u8 flags[nodeCount]
+  u8 bigramFreq[bigramEntries] | u8 trigramFreq[trigramEntries]
 
-Version 1 is the same without the trigram parts.
+There's no parent array: a leaf's firstChild is where its children would have
+started, so firstChild never decreases and a node's parent is the last node
+whose firstChild is <= it (binary search). Versions 1 and 2 (an i32 parent
+array, i32 chars, u16 child counts, ungrouped trigrams) are still readable.
 
 Nodes are laid out breadth-first, so each node's children are contiguous and
 sorted by code point. Node 0 is the root. freq > 0 marks the end of a word;
@@ -81,7 +84,7 @@ import unicodedata
 from collections import deque
 from pathlib import Path
 
-FORMAT_VERSION = 2
+FORMAT_VERSION = 3
 TATOEBA_HOLDOUT = 50  # keep in sync with tools/bench/make_bench.py
 TOKEN = re.compile(r"[^\W\d_]+(?:['’][^\W\d_]+)*")
 # Context doesn't carry across punctuation (like the keyboard's TextContext).
@@ -645,7 +648,9 @@ def write_dictionary(path: Path, words: dict[str, tuple[int, int]],
             node = node.children.setdefault(cp, Node(cp))
         node.freq, node.flags = words[word]
 
-    # Breadth-first layout: a node's children get consecutive ids.
+    # Breadth-first layout: a node's children get consecutive ids. A leaf's
+    # firstChild is where its children would start, so the array never decreases
+    # and a node's parent can be found by binary search (no parent array).
     order: list[Node] = [root]
     root.id = 0
     first_child = [0]
@@ -654,7 +659,7 @@ def write_dictionary(path: Path, words: dict[str, tuple[int, int]],
     while queue:
         node = queue.popleft()
         kids = [node.children[k] for k in sorted(node.children)]
-        first_child[node.id] = len(order) if kids else 0
+        first_child[node.id] = len(order)
         for kid in kids:
             kid.id = len(order)
             order.append(kid)
@@ -690,44 +695,51 @@ def write_dictionary(path: Path, words: dict[str, tuple[int, int]],
             bigram_freq.append(bf)
     bigram_start.append(len(bigram_next))
 
-    tri_first, tri_second, tri_start, tri_next, tri_freq = [], [], [], [], []
+    # Three-word contexts, grouped by their first word (stored once per group).
+    tri_word, tri_word_start, tri_second, tri_start, tri_next, tri_freq = [], [], [], [], [], []
     for (a, b), nexts in sorted(((node_of(a), node_of(b)), lst) for (a, b), lst in (trigrams or {}).items() if lst):
-        tri_first.append(a)
+        if not tri_word or tri_word[-1] != a:
+            tri_word.append(a)
+            tri_word_start.append(len(tri_second))
         tri_second.append(b)
         tri_start.append(len(tri_next))
         for nxt, tf in nexts:
             tri_next.append(node_of(nxt))
             tri_freq.append(tf)
+    tri_word_start.append(len(tri_second))
     tri_start.append(len(tri_next))
+
+    # Narrowest widths that fit: English letters fit in one byte.
+    top = max(chars)
+    char_width = 1 if top < 0x100 else 2 if top < 0x10000 else 4
+    count_width = 1 if max(child_count) < 0x100 else 2
+    layout_flags = {1: 0, 2: 1, 4: 2}[char_width] | (4 if count_width == 2 else 0)
+
+    def sized(values, width) -> bytes:
+        return bytes(values) if width == 1 else u16(values) if width == 2 else i32(values)
 
     meta_bytes = json.dumps(meta, ensure_ascii=False, sort_keys=True).encode("utf-8")
     meta_bytes += b" " * (-len(meta_bytes) % 4)
 
     out = io.BytesIO()
     with out as f:
+        def section(data: bytes) -> None:
+            f.write(data)
+            f.write(b"\0" * (-f.tell() % 4))  # every section starts 4-byte aligned
+
         f.write(b"EKD1")
         f.write(i32([FORMAT_VERSION, n, len(bigram_word), len(bigram_next),
-                     len(tri_first), len(tri_next), len(meta_bytes)]))
+                     len(tri_word), len(tri_second), len(tri_next), layout_flags, len(meta_bytes)]))
         f.write(meta_bytes)
-        f.write(i32(chars))
-        f.write(i32(first_child))
-        f.write(i32(parent))
-        f.write(i32(bigram_word))
-        f.write(i32(bigram_start))
-        f.write(i32(bigram_next))
-        f.write(u16(child_count))
-        f.write(freq)
-        f.write(bytes(max_sub))
-        f.write(flags)
-        f.write(bytes(bigram_freq))
-        f.write(b"\0" * (-f.tell() % 4))
-        f.write(i32(tri_first))
-        f.write(i32(tri_second))
-        f.write(i32(tri_start))
-        f.write(i32(tri_next))
-        f.write(bytes(tri_freq))
+        for part in (first_child, bigram_word, bigram_start, bigram_next,
+                     tri_word, tri_word_start, tri_second, tri_start, tri_next):
+            section(i32(part))
+        section(sized(chars, char_width))
+        section(sized(child_count, count_width))
+        for part in (freq, bytes(max_sub), flags, bytes(bigram_freq), bytes(tri_freq)):
+            section(part)
         data = f.getvalue()
-    if path.suffix == ".gz":
+    if path.suffix in (".gz", ".ekdz"):
         # mtime=0 and no file name keep the output byte-identical between builds.
         with open(path, "wb") as raw, gzip.GzipFile(fileobj=raw, mode="wb", compresslevel=9, mtime=0, filename="") as gz:
             gz.write(data)
