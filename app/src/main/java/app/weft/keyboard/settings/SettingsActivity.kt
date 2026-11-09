@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.provider.Settings
+import app.weft.keyboard.voice.VoiceSettings
 import android.speech.SpeechRecognizer
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.ComponentActivity
@@ -478,11 +479,8 @@ internal fun VoiceSection() {
             horizontalArrangement = Arrangement.End,
         ) {
             OutlinedButton(
-                onClick = {
-                    // The system's "Voice input" / default speech engine screen; not every phone has it.
-                    runCatching { context.startActivity(Intent(Settings.ACTION_VOICE_INPUT_SETTINGS)) }
-                        .recoverCatching { context.startActivity(Intent(Settings.ACTION_SETTINGS)) }
-                },
+                // System Languages › Speech › Voice input.
+                onClick = { VoiceSettings.openVoiceInputSettings(context) },
             ) { Text(stringResource(R.string.settings_voice_engine)) }
         }
     }

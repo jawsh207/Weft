@@ -64,7 +64,7 @@
     <string name="settings_page_about_summary">Dictionary sources, emoji data</string>
     <string name="settings_swipe_learning_note">Swipe learns where your thumb tends to land and which look-alike word you mean. You\'ll find it, and can clear it, under Learning.</string>
     <string name="settings_voice_engine">Choose speech engine</string>
-    <string name="settings_voice_note">Weft always uses the speech engine chosen in your phone\'s settings. Punctuation goes in only when you say it (\u201Cperiod\u201D, \u201Ccomma\u201D, \u201Cquestion mark\u201D, \u201Cnew line\u201D…).</string>
+    <string name="settings_voice_note">Weft always uses the speech engine chosen in your phone\'s settings (Languages › Speech › Voice input). Punctuation goes in only when you say it (\u201Cperiod\u201D, \u201Ccomma\u201D, \u201Cquestion mark\u201D, \u201Cnew line\u201D…).</string>
     <string name="settings_keys_title">Keys and voice</string>
     <string name="settings_haptics">Vibration on key press</string>
     <string name="settings_haptics_off">Off</string>
