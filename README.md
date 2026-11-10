@@ -153,8 +153,8 @@ app/src/main/java/app/weft/keyboard/
 3. ~~Long-press alternates~~ — done: accented letters, symbols, superscripts and fractions.
 4. ~~Settings~~ — done: vibration strength, key height, number row, prefer offline voice.
 5. **Large screens** — floating, one-handed and split layouts for tablets and foldables.
-6. ~~Gesture typing~~ — first version done. Improvements to come back to
-   (ML decoder, multi-word swipes, per-user tuning) are listed in
+6. ~~Gesture typing~~ — done: learns from your swipes and reads their
+   timing. Parked ideas (ML decoder, per-person tuning) are in
    [docs/swipe-typing.md](docs/swipe-typing.md#future-improvements).
 7. **More languages** — English variants (US, UK, Canada, Australia) done; other
    languages need layouts and dictionaries per subtype.

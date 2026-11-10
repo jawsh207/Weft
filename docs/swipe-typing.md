@@ -64,7 +64,9 @@ frequency and context decide; in real typing the previous two words help.
 
 ## Future improvements
 
-Come back to these, roughly in order of value:
+Swipe typing is in a good place as of v0.11.0 (Nov 2026): in everyday use it
+gets whole messages right, so the remaining ideas are parked rather than
+planned. What's done, what's parked and what was dropped:
 
 1. ~~**Learn from real use.**~~ *Done (Nov 2026), on the phone only:* once the
    user moves on from a swipe, `SwipeDecoder.learnFrom` records where it started
@@ -72,12 +74,13 @@ Come back to these, roughly in order of value:
    the decoder subtracts once there are 15+ swipes), and which guess they picked
    instead of the first one (that word wins next time). On simulated swipes from
    a thumb that lands a third of a key low and left, top-1 goes from 80.6% to
-   91.2% after 150 swipes. Still open: adapting the radii or shape weight to a
-   user's sloppiness.
+   91.2% after 150 swipes.
 2. ~~**Better context.**~~ *Done:* candidates are ranked with the dictionary's
    word pairs and three-word context (two words back), plus the user's own word
    frequency and pairs (`LearnedWords.boost` / `pairBoost`).
-3. **Machine-learning decoder.** Train a small model (e.g. a GRU or
+3. **Machine-learning decoder.** *Parked:* not worth it while the current
+   decoder works this well, and without real swipe data it could only be
+   trained on simulated swipes. The idea: train a small model (e.g. a GRU or
    transformer over the point sequence) on synthetic swipes generated from the
    dictionary plus any real data, export to ONNX or LiteRT, and run it on
    device. Keep `SwipeDecoder`'s interface so it can replace or re-rank the
@@ -93,13 +96,18 @@ Come back to these, roughly in order of value:
    on straight stretches isn't well known, so the test also runs a thumb that
    barely slows and hesitates often (92.5 → 93.7, 77.9 → 81.6) and one that
    hardly slows at all (91.4 → 93.4, 79.7 → 83.3): timing never hurt. These
-   are simulated; real swipes are the real test. Still open: learning each
-   user's own rhythm.
-5. **Swipe across space.** Multiple words in one gesture, and swiping on the
-   symbols page.
+   are simulated. In real use the difference is hard to notice, as expected
+   of a tie-breaker, and it caused no odd picks.
+5. ~~**Swipe across space.**~~ *Dropped:* people lift their thumb between
+   words, and multi-word gestures would make every swipe harder to decode.
+   Swiping on the symbols page was dropped with it: symbols are tapped.
 6. ~~**Look and feel.**~~ *Done:* the trail tapers and fades toward its tail,
    and letters light up as the path crosses them (Settings › Swipe › Enhanced
    visuals; off shows a plain trail). The best guess shows as the middle
    suggestion; a bubble above the finger was tried and removed as redundant.
 7. **More languages and layouts.** The decoder only needs key centres, so it
    works for any layout once dictionaries exist (see the roadmap).
+8. **Per-person tuning.** *Parked:* small gains that would be hard to feel.
+   Two pieces: adapting how far a swipe may stray from a key to how precise
+   the user is (today it's 1.4 key widths for everyone), and judging slowdowns
+   against the user's own rhythm.
