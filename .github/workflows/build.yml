@@ -159,7 +159,7 @@ jobs:
           import glob, html, re
           for f in sorted(glob.glob("app/build/test-results/testDebugUnitTest/*.xml")):
               text = html.unescape(open(f, encoding="utf-8", errors="replace").read())
-              for line in re.findall(r"^(?:Benchmark|Swipe accuracy): .*$", text, re.M):
+              for line in re.findall(r"^(?:Benchmark|Swipe accuracy|Swipe timing)[^:\n]*: .*$", text, re.M):
                   print(f"::notice title=Benchmark::{line}")
           PY
 

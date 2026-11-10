@@ -107,9 +107,11 @@ internal fun SwipeArea(rows: List<KeyRow>, state: KeyboardState, handlers: KeyHa
                 }
                 val xs = ArrayList<Float>()
                 val ys = ArrayList<Float>()
-                fun add(p: Offset) {
+                val times = ArrayList<Long>() // when each point was touched: the decoder reads the rhythm
+                fun add(p: Offset, at: Long) {
                     xs += p.x / keyWidth
                     ys += (p.y / rowHeight - 0.5f) * ROW_ASPECT
+                    times += maxOf(at, times.lastOrNull() ?: at)
                 }
                 fun glowAt(p: Offset) {
                     val rect = letterKeyAt(rows, p, keyWidth, rowHeight)?.deflate(gap) ?: return
@@ -117,7 +119,7 @@ internal fun SwipeArea(rows: List<KeyRow>, state: KeyboardState, handlers: KeyHa
                     val existing = glows.lastOrNull()
                     if (existing != null && existing.rect == rect) existing.at = t else glows += Glow(rect, t)
                 }
-                add(down.position)
+                add(down.position, down.uptimeMillis)
                 var started = false
                 var lastPreview = 0L
                 while (true) {
@@ -125,8 +127,8 @@ internal fun SwipeArea(rows: List<KeyRow>, state: KeyboardState, handlers: KeyHa
                         .firstOrNull { it.id == down.id } ?: break
                     if (!change.pressed) {
                         if (started) {
-                            add(change.position)
-                            handlers.onSwipe(xs.toFloatArray(), ys.toFloatArray(), true)
+                            add(change.position, change.uptimeMillis)
+                            handlers.onSwipe(xs.toFloatArray(), ys.toFloatArray(), times.toLongArray(), true)
                             swiping = false
                             scope.launch {
                                 fade.animateTo(0f)
@@ -148,13 +150,15 @@ internal fun SwipeArea(rows: List<KeyRow>, state: KeyboardState, handlers: KeyHa
                         haptics?.tick(view)
                     }
                     change.consume() // the key under the finger won't type
-                    add(p)
+                    // The screen samples faster than frames arrive: keep the points in between too.
+                    for (h in change.historical) add(h.position, h.uptimeMillis)
+                    add(p, change.uptimeMillis)
                     trail += p
                     glowAt(p)
                     val t = SystemClock.uptimeMillis()
                     if (t - lastPreview >= PREVIEW_MS) {
                         lastPreview = t
-                        handlers.onSwipe(xs.toFloatArray(), ys.toFloatArray(), false)
+                        handlers.onSwipe(xs.toFloatArray(), ys.toFloatArray(), times.toLongArray(), false)
                     }
                 }
             }

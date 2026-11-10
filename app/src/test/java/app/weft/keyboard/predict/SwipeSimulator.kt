@@ -26,7 +26,24 @@ import kotlin.random.Random
  */
 class SwipeSimulator(private val centers: Map<Int, FloatArray>, private val rnd: Random) {
 
-    data class Swipe(val xs: FloatArray, val ys: FloatArray)
+    /** [times] (ms, one per point) is only set by [timed]. */
+    data class Swipe(val xs: FloatArray, val ys: FloatArray, val times: LongArray? = null)
+
+    /**
+     * How the simulated finger speeds up and slows down in [timed]. A dip of 1 is
+     * a full stop at a letter, 0 is passing it at cruising speed.
+     */
+    data class Pace(
+        /** Typical dip at a letter that lies on a straight stretch (mean, spread). */
+        val straightDip: Float = 0.35f,
+        val straightSpread: Float = 0.2f,
+        /** Extra dip per unit of turn (0 = straight on, 1 = full reversal). */
+        val cornerDip: Float = 1.4f,
+        /** Chance, per long stretch between letters, of a slowdown that means nothing. */
+        val hesitation: Float = 0.1f,
+        /** Time between touch samples, ms. */
+        val sampleMs: Float = 12f,
+    )
 
     private fun keys(word: String): List<FloatArray> {
         val out = ArrayList<FloatArray>()
@@ -62,6 +79,97 @@ class SwipeSimulator(private val centers: Map<Int, FloatArray>, private val rnd:
 
     /** [sloppiness] scales every error: 1 = a typical relaxed thumb, 1.5 = hurried. */
     fun natural(word: String, sloppiness: Float = 1f): Swipe? {
+        val control = control(word, sloppiness) ?: return null
+        val tail = control.last()
+        // Sampled densely near letters (slow) and sparsely between them (fast).
+        val xs = ArrayList<Float>()
+        val ys = ArrayList<Float>()
+        for (i in 0 until control.size - 1) {
+            val p0 = control[maxOf(0, i - 1)]
+            val p1 = control[i]
+            val p2 = control[i + 1]
+            val p3 = control[minOf(control.size - 1, i + 2)]
+            val steps = 8
+            for (s in 0 until steps) {
+                val u = s / steps.toFloat()
+                val t = (1 - cos(u * PI.toFloat())) / 2 // ease in and out
+                xs += catmull(p0[0], p1[0], p2[0], p3[0], t) + gauss() * 0.025f
+                ys += catmull(p0[1], p1[1], p2[1], p3[1], t) + gauss() * 0.025f
+            }
+        }
+        xs += tail[0]
+        ys += tail[1]
+        return Swipe(xs.toFloatArray(), ys.toFloatArray())
+    }
+
+    /**
+     * The same kind of path as [natural], with a timestamp per point, sampled at
+     * a steady rate like a touch screen. The finger starts from rest, slows at
+     * each letter (a lot at sharp turns, a little or not at all on straight
+     * stretches, less when hurried), sometimes hesitates for no reason, takes
+     * longer over longer stretches, and lifts while still moving past the last
+     * letter. How much real thumbs slow on straight stretches isn't well known:
+     * [pace] sets it, and the tests try both generous and stingy values.
+     */
+    fun timed(word: String, sloppiness: Float = 1f, pace: Pace = Pace()): Swipe? {
+        val control = control(word, sloppiness) ?: return null
+        val letters = control.size - 1 // the last control point is the overshoot
+        val n = sloppiness
+        // How much the finger slows at each control point.
+        val dip = FloatArray(control.size)
+        dip[0] = 1f
+        for (i in 1 until letters) {
+            val turn = if (i < letters - 1) turnAngle(control[i - 1], control[i], control[i + 1]) / PI.toFloat() else 0.35f
+            val straight = (pace.straightDip + gauss() * pace.straightSpread).coerceAtLeast(0f) / n
+            dip[i] = (straight + turn * pace.cornerDip).coerceIn(0f, 1f)
+        }
+        dip[letters] = 0.4f
+        val xs = ArrayList<Float>()
+        val ys = ArrayList<Float>()
+        val ts = ArrayList<Long>()
+        var clock = 0f // time at the start of the current stretch
+        var next = 0f // time of the next sample
+        for (i in 0 until control.size - 1) {
+            val p0 = control[maxOf(0, i - 1)]
+            val p1 = control[i]
+            val p2 = control[i + 1]
+            val p3 = control[minOf(control.size - 1, i + 2)]
+            val length = hypot(p2[0] - p1[0], p2[1] - p1[1])
+            val duration = (60f + 110f * (ln(1f + length) / ln(2f))) * kotlin.math.exp(gauss() * 0.2f) / n
+            val hesitateAt = if (length > 1.5f && rnd.nextFloat() < pace.hesitation) 0.3f + rnd.nextFloat() * 0.4f else -1f
+            val hesitateBy = 0.3f + rnd.nextFloat() * 0.4f
+            // Speed along the stretch, then how far along the finger is at each moment.
+            val fine = 200
+            val progress = FloatArray(fine + 1)
+            for (k in 1..fine) {
+                val tau = (k - 0.5f) / fine
+                val c = cos(tau * PI.toFloat() / 2)
+                var v = 1f - dip[i] * c * c - dip[i + 1] * (1 - c * c)
+                if (hesitateAt >= 0f) {
+                    val z = (tau - hesitateAt) / 0.12f
+                    v *= 1f - hesitateBy * kotlin.math.exp(-z * z)
+                }
+                progress[k] = progress[k - 1] + v.coerceAtLeast(0.03f)
+            }
+            while (next < clock + duration) {
+                val f = (next - clock) / duration * fine
+                val k = f.toInt().coerceIn(0, fine - 1)
+                val u = (progress[k] + (progress[k + 1] - progress[k]) * (f - k)) / progress[fine]
+                xs += catmull(p0[0], p1[0], p2[0], p3[0], u) + gauss() * 0.025f
+                ys += catmull(p0[1], p1[1], p2[1], p3[1], u) + gauss() * 0.025f
+                ts += next.toLong()
+                next += pace.sampleMs + (rnd.nextFloat() - 0.5f) * 4f
+            }
+            clock += duration
+        }
+        xs += control.last()[0]
+        ys += control.last()[1]
+        ts += maxOf(clock.toLong(), ts.last() + 1)
+        return Swipe(xs.toFloatArray(), ys.toFloatArray(), ts.toLongArray())
+    }
+
+    /** Where the finger actually goes: a point per letter (after aim error and corner cutting), plus the overshoot. */
+    private fun control(word: String, sloppiness: Float): List<FloatArray>? {
         val ks = keys(word)
         if (ks.size < 2) return null
         val n = sloppiness
@@ -101,27 +209,7 @@ class SwipeSimulator(private val centers: Map<Int, FloatArray>, private val rnd:
         val over = rnd.nextFloat() * 0.3f * n
         val tail = floatArrayOf(b[0] + (b[0] - a[0]) / len * over, b[1] + (b[1] - a[1]) / len * over)
 
-        // Smooth curve through the points, sampled densely near letters (slow) and
-        // sparsely between them (fast).
-        val control = cut + listOf(tail)
-        val xs = ArrayList<Float>()
-        val ys = ArrayList<Float>()
-        for (i in 0 until control.size - 1) {
-            val p0 = control[maxOf(0, i - 1)]
-            val p1 = control[i]
-            val p2 = control[i + 1]
-            val p3 = control[minOf(control.size - 1, i + 2)]
-            val steps = 8
-            for (s in 0 until steps) {
-                val u = s / steps.toFloat()
-                val t = (1 - cos(u * PI.toFloat())) / 2 // ease in and out
-                xs += catmull(p0[0], p1[0], p2[0], p3[0], t) + gauss() * 0.025f
-                ys += catmull(p0[1], p1[1], p2[1], p3[1], t) + gauss() * 0.025f
-            }
-        }
-        xs += tail[0]
-        ys += tail[1]
-        return Swipe(xs.toFloatArray(), ys.toFloatArray())
+        return cut + listOf(tail)
     }
 
     private fun turnAngle(a: FloatArray, b: FloatArray, c: FloatArray): Float {

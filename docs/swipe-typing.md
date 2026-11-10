@@ -82,8 +82,19 @@ Come back to these, roughly in order of value:
    dictionary plus any real data, export to ONNX or LiteRT, and run it on
    device. Keep `SwipeDecoder`'s interface so it can replace or re-rank the
    current decoder. Keep it FOSS: open weights, OSI-licensed runtime.
-4. **Timing.** Pauses on a key are a strong signal a letter is intended;
-   the decoder currently ignores timing.
+4. ~~**Timing.**~~ *Done (Nov 2026):* each swipe point carries its time, and the
+   decoder finds where the finger slowed down (compared with the fastest
+   movement nearby). Among the 40 front-runners, a word loses points for
+   slowdowns none of its letters explain and for middle letters passed at full
+   speed, and a deliberate pause counts up to three times over: pausing on "o"
+   along the straight p–t line gives "pot" rather than "put". On simulated
+   swipes with timestamps (`SwipeSimulator.timed`, 999 words), top-1 goes from
+   92.1% to 94.5% relaxed and 77.4% to 80.8% hurried. How much real thumbs slow
+   on straight stretches isn't well known, so the test also runs a thumb that
+   barely slows and hesitates often (92.5 → 93.7, 77.9 → 81.6) and one that
+   hardly slows at all (91.4 → 93.4, 79.7 → 83.3): timing never hurt. These
+   are simulated; real swipes are the real test. Still open: learning each
+   user's own rhythm.
 5. **Swipe across space.** Multiple words in one gesture, and swiping on the
    symbols page.
 6. ~~**Look and feel.**~~ *Done:* the trail tapers and fades toward its tail,

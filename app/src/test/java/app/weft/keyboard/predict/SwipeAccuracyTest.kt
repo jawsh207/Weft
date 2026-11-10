@@ -18,6 +18,8 @@ import kotlin.random.Random
  * Results (Nov 2026, ~380 common words), top-1 / top-3: straight 96.8% / 99.7%,
  * natural 93.4% / 99.7%, hurried 84.1% / 96.6%. Before tuning on natural swipes the
  * decoder managed 92.6% and 67.9% top-1 on the natural and hurried sets.
+ * With timestamps (timingHelpsTellLookAlikesApart, 999 words): 92.1% → 94.5%
+ * relaxed, 77.4% → 80.8% hurried.
  */
 class SwipeAccuracyTest {
 
@@ -104,6 +106,80 @@ class SwipeAccuracyTest {
         assertEquals(other, decoder.decode(s.xs, s.ys, null).first().word)
     }
 
+    /**
+     * Timing: the same swipes decoded without and with their timestamps. Where the
+     * finger slowed tells look-alike words apart. Nobody knows exactly how much real
+     * thumbs slow on straight stretches, so this also runs a "stingy" thumb (barely
+     * slows, hesitates often) and a "steady" one (hardly slows at all): timing has
+     * to help the first two and must not hurt the third.
+     */
+    @Test
+    fun timingHelpsTellLookAlikesApart() {
+        val file = dictionaryFile()
+        assumeTrue("dictionary not built", file != null)
+        val dict = BinaryDictionary.map(file!!)
+        val centers = KeyGeometry.centers(Layouts.qwerty)
+        val decoder = SwipeDecoder(dict, centers, LearnedWords(null))
+        val words = (1 until dict.nodeCount)
+            .filter { dict.freq(it) >= 135 && !dict.isOffensive(it) }
+            .map { dict.word(it) }
+            .filter { it.length in 2..11 && it.all { c -> c in 'a'..'z' } }
+            .shuffled(Random(7))
+            .take(1200)
+        val paces = listOf(
+            Triple("typical", SwipeSimulator.Pace(), MIN_TIMING_GAIN),
+            Triple("stingy", SwipeSimulator.Pace(straightDip = 0.12f, straightSpread = 0.15f, hesitation = 0.25f), MIN_TIMING_GAIN),
+            Triple("steady", SwipeSimulator.Pace(straightDip = 0f, straightSpread = 0f, cornerDip = 0.3f, hesitation = 0f), 0.0),
+        )
+        for ((label, pace, minGain) in paces) {
+            for ((speed, sloppiness) in listOf("relaxed" to 1f, "hurried" to 1.5f)) {
+                val sim = SwipeSimulator(centers, Random(11))
+                var without = 0
+                var with = 0
+                var n = 0
+                for (w in words) {
+                    val s = sim.timed(w, sloppiness, pace) ?: continue
+                    n++
+                    if (decoder.decode(s.xs, s.ys, null).firstOrNull()?.word?.lowercase() == w) without++
+                    if (decoder.decode(s.xs, s.ys, null, times = s.times).firstOrNull()?.word?.lowercase() == w) with++
+                }
+                val a = without * 100.0 / n
+                val b = with * 100.0 / n
+                println("Swipe timing ($label thumb, $speed): top-1 %.1f%% without timing, %.1f%% with (%d words)".format(a, b, n))
+                assertTrue("timing should help a $label $speed thumb: $a -> $b", b >= a + minGain)
+            }
+        }
+    }
+
+    /** One straight line from p to t: only where the finger pauses says pot, pit or put. */
+    @Test
+    fun aPauseOnALetterPicksItsWord() {
+        val file = dictionaryFile()
+        assumeTrue("dictionary not built", file != null)
+        val dict = BinaryDictionary.map(file!!)
+        val centers = KeyGeometry.centers(Layouts.qwerty)
+        val decoder = SwipeDecoder(dict, centers, LearnedWords(null))
+        val p = centers['p'.code]!!
+        val t = centers['t'.code]!!
+        for (word in listOf("pot", "pit", "put")) {
+            val pauseX = centers[word[1].code]!![0]
+            val xs = ArrayList<Float>()
+            val ys = ArrayList<Float>()
+            val times = ArrayList<Long>()
+            var clock = 0L
+            var x = p[0]
+            while (x > t[0]) {
+                xs += x; ys += p[1]; times += clock
+                // 10 ms per step, lingering for about half a second around the letter.
+                x -= if (kotlin.math.abs(x - pauseX) < 0.15f) 0.006f else 0.2f
+                clock += 10
+            }
+            xs += t[0]; ys += t[1]; times += clock
+            val got = decoder.decode(xs.toFloatArray(), ys.toFloatArray(), null, times = times.toLongArray())
+            assertEquals("pausing on '${word[1]}'", word, got.firstOrNull()?.word)
+        }
+    }
+
     private fun score(decoder: SwipeDecoder, words: List<String>, make: (String) -> SwipeSimulator.Swipe?): Pair<Double, Double> {
         var top1 = 0
         var top3 = 0
@@ -126,5 +202,6 @@ class SwipeAccuracyTest {
         const val MIN_NATURAL = 90.0
         const val MIN_HURRIED = 78.0
         const val MIN_OFFSET_GAIN = 3.0
+        const val MIN_TIMING_GAIN = 0.5
     }
 }

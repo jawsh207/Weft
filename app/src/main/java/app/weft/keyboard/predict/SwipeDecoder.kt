@@ -45,6 +45,14 @@ class SwipeDecoder(
         val passRadius: Float = PASS_RADIUS,
         /** Small handicap for words the dictionary only has capitalized (names, places). */
         val namePenalty: Float = NAME_PENALTY,
+        /** Cost of a slowdown in the swipe that none of a word's letters explains. */
+        val unexplainedDip: Float = UNEXPLAINED_DIP,
+        /** Cost of a middle letter the finger passed without slowing, when it slowed for others. */
+        val unsupportedLetter: Float = UNSUPPORTED_LETTER,
+        /** How near (key widths along the path) a slowdown must be to a letter to belong to it. */
+        val dipReach: Float = DIP_REACH,
+        /** Slowdowns shallower than this are ignored. */
+        val minDip: Float = MIN_DIP,
     )
 
     data class Candidate(val word: String, val score: Float, val geometry: Float)
@@ -56,13 +64,18 @@ class SwipeDecoder(
         return len
     }
 
-    /** [previous] is the word before this one, [before] the one before that. */
+    /**
+     * [previous] is the word before this one, [before] the one before that.
+     * [times] (ms, one per point) is optional: with it, where the finger slowed
+     * down helps choose between words whose paths look alike.
+     */
     fun decode(
         rawXs: FloatArray,
         rawYs: FloatArray,
         previous: String?,
         limit: Int = 5,
         before: String? = null,
+        times: LongArray? = null,
     ): List<Candidate> {
         if (rawXs.size < 2 || rawXs.size != rawYs.size) return emptyList()
         if (pathLength(rawXs, rawYs) < MIN_PATH) return emptyList()
@@ -107,6 +120,13 @@ class SwipeDecoder(
         }
         // "major" and "Major" trace the same path: offer the likelier one once.
         var ranked = found.values.sortedByDescending { it.score }.distinctBy { it.word.lowercase() }
+        // Timing: among the front-runners, prefer the word whose letters are where the finger slowed.
+        val dips = if (times != null && times.size == xs.size) Dips.of(xs, ys, times, tuning.minDip) else null
+        if (dips != null) {
+            ranked = ranked.take(TIMING_CANDIDATES)
+                .map { c -> c.copy(score = c.score - timingCost(c.word, dense, dips)) }
+                .sortedByDescending { it.score }
+        }
         // Words this user picked over the first guess before ("four" over "for") move up.
         val top = ranked.firstOrNull()?.word
         if (top != null) {
@@ -239,6 +259,159 @@ class SwipeDecoder(
         return location + tuning.shape * shape + tuning.endpoints / tuning.geometry * ends
     }
 
+    // --- Timing --------------------------------------------------------------------
+
+    /**
+     * Places where the finger slowed down, by distance along the path (key widths).
+     * A depth of 1 is a full stop, 0.35 a slight slowdown compared with the speed
+     * just before and after. [weight] is the depth, counted up to three times over
+     * when the finger lingered: a deliberate pause is stronger evidence than a
+     * passing slowdown.
+     */
+    private class Dips(val at: FloatArray, val depth: FloatArray, val weight: FloatArray, val length: Float) {
+        /** Typical depth of the slowdowns in the middle of the swipe; 0 if there are none. */
+        val typical: Float = run {
+            var sum = 0f
+            var n = 0
+            for (i in at.indices) if (at[i] > EDGE && at[i] < length - EDGE) { sum += depth[i]; n++ }
+            if (n == 0) 0f else sum / n
+        }
+
+        companion object {
+            const val EDGE = 0.3f
+
+            fun of(xs: FloatArray, ys: FloatArray, times: LongArray, minDip: Float): Dips? {
+                val m = xs.size
+                val cum = FloatArray(m)
+                for (i in 1 until m) {
+                    if (times[i] < times[i - 1]) return null
+                    cum[i] = cum[i - 1] + dist(xs[i - 1], ys[i - 1], xs[i], ys[i])
+                }
+                val total = cum[m - 1]
+                if (total <= 0f || times[m - 1] - times[0] < MIN_DURATION_MS) return null
+                val n = DENSE_POINTS
+                val step = total / (n - 1)
+                // Speed around each point: distance covered over the time it took,
+                // from first reaching the window to last leaving it (so a pause counts).
+                val h = max(SPEED_WINDOW, step)
+                val speed = FloatArray(n)
+                var lo = 0
+                var hi = 0
+                for (k in 0 until n) {
+                    val s = k * step
+                    val s1 = max(0f, s - h)
+                    val s2 = minOf(total, s + h)
+                    while (lo < m - 1 && cum[lo + 1] < s1) lo++ // cum[lo] <= s1 < ... first reach
+                    while (hi < m - 1 && cum[hi + 1] <= s2) hi++ // last index at or before s2
+                    val t1 = timeWithin(cum, times, lo, s1)
+                    val t2 = timeWithin(cum, times, hi, s2)
+                    speed[k] = (s2 - s1) / max(1f, t2 - t1)
+                }
+                // How much slower than the fastest nearby movement.
+                val reach = (CRUISE_REACH / step).toInt().coerceAtLeast(1)
+                val slow = FloatArray(n)
+                for (k in 0 until n) {
+                    var top = 0f
+                    for (j in max(0, k - reach)..minOf(n - 1, k + reach)) top = max(top, speed[j])
+                    slow[k] = if (top > 0f) 1f - speed[k] / top else 0f
+                }
+                // Keep the local peaks.
+                val apart = (DIP_APART / step).toInt().coerceAtLeast(1)
+                val at = ArrayList<Float>()
+                val depth = ArrayList<Float>()
+                val weight = ArrayList<Float>()
+                for (k in 0 until n) {
+                    if (slow[k] < minDip) continue
+                    var peak = true
+                    for (j in max(0, k - apart)..minOf(n - 1, k + apart)) {
+                        if (slow[j] > slow[k] || (slow[j] == slow[k] && j < k)) { peak = false; break }
+                    }
+                    if (peak) {
+                        val lingered = 2 * h / speed[k] // ms spent around this point
+                        at += k * step
+                        depth += slow[k]
+                        weight += slow[k] * (1f + ((lingered - PAUSE_MS) / PAUSE_MS).coerceIn(0f, 2f))
+                    }
+                }
+                return Dips(at.toFloatArray(), depth.toFloatArray(), weight.toFloatArray(), total)
+            }
+
+            /** The time at distance [s] along the path, within the segment starting at point [i]. */
+            private fun timeWithin(cum: FloatArray, times: LongArray, i: Int, s: Float): Float {
+                if (i >= cum.size - 1) return times[cum.size - 1].toFloat()
+                val span = cum[i + 1] - cum[i]
+                val f = if (span > 0f) ((s - cum[i]) / span).coerceIn(0f, 1f) else 0f
+                return times[i] + (times[i + 1] - times[i]) * f
+            }
+        }
+    }
+
+    /**
+     * How badly a word fits where the finger slowed: slowdowns away from all of
+     * its letters, and middle letters passed at full speed (only counted when the
+     * finger did slow for other things, so a steady-speed swiper isn't penalized).
+     */
+    private fun timingCost(word: String, path: Array<FloatArray>, dips: Dips): Float {
+        val keys = keysOf(word)
+        if (keys.isEmpty()) return 0f
+        val where = align(keys, path)
+        val step = dips.length / (path.size - 1)
+        var cost = 0f
+        for (d in dips.at.indices) {
+            var near = 0f
+            for (k in where) near = max(near, closeness(dips.at[d] - k * step))
+            cost += tuning.unexplainedDip * dips.weight[d] * (1f - near)
+        }
+        if (dips.typical > 0f) {
+            for (i in 1 until keys.size - 1) {
+                var support = 0f
+                for (d in dips.at.indices) support = max(support, dips.depth[d] * closeness(dips.at[d] - where[i] * step))
+                cost += tuning.unsupportedLetter * max(0f, dips.typical - support)
+            }
+        }
+        return cost
+    }
+
+    private fun closeness(distance: Float): Float {
+        val z = distance / tuning.dipReach
+        return kotlin.math.exp(-z * z / 2)
+    }
+
+    /** For each key, the index of the path point it best matches, keeping the keys in order. */
+    private fun align(keys: List<FloatArray>, path: Array<FloatArray>): IntArray {
+        val n = path.size
+        val m = keys.size
+        // best[i][j]: least total squared distance with key i matched at point j.
+        val from = Array(m) { IntArray(n) }
+        var prev = FloatArray(n)
+        var cur = FloatArray(n)
+        for (i in 0 until m) {
+            var bestBefore = Float.MAX_VALUE
+            var bestIndex = 0
+            for (j in 0 until n) {
+                val dx = path[j][0] - keys[i][0]
+                val dy = path[j][1] - keys[i][1]
+                val d = dx * dx + dy * dy
+                if (i == 0) {
+                    cur[j] = d
+                } else {
+                    if (prev[j] < bestBefore) { bestBefore = prev[j]; bestIndex = j }
+                    cur[j] = bestBefore + d
+                    from[i][j] = bestIndex
+                }
+            }
+            val t = prev; prev = cur; cur = t
+        }
+        val out = IntArray(m)
+        var j = 0
+        for (k in 1 until n) if (prev[k] < prev[j]) j = k
+        for (i in m - 1 downTo 0) {
+            out[i] = j
+            if (i > 0) j = from[i][j]
+        }
+        return out
+    }
+
     /** Key centers for a word's letters, consecutive repeats collapsed. */
     private fun keysOf(word: String): List<FloatArray> {
         val out = ArrayList<FloatArray>(word.length)
@@ -268,6 +441,24 @@ class SwipeDecoder(
         const val BIGRAM_WEIGHT = 3f
         const val POSSESSIVE_PENALTY = 1f
         const val NAME_PENALTY = 1f
+
+        // Timing (see docs/swipe-typing.md). Costs are in the same units as the score.
+        const val UNEXPLAINED_DIP = 1f
+        const val UNSUPPORTED_LETTER = 1f
+        /** Only the front-runners are compared by timing. */
+        const val TIMING_CANDIDATES = 40
+        /** Swipes quicker than this (ms) are too short to read a rhythm from. */
+        const val MIN_DURATION_MS = 60L
+        /** Speed is averaged over this distance (key widths) either side of a point. */
+        const val SPEED_WINDOW = 0.12f
+        /** A slowdown is judged against the fastest movement within this distance. */
+        const val CRUISE_REACH = 1.2f
+        const val MIN_DIP = 0.35f
+        /** Lingering longer than this (ms) around a point starts to count as a deliberate pause. */
+        const val PAUSE_MS = 120f
+        /** Two slowdowns closer than this count once. */
+        const val DIP_APART = 0.3f
+        const val DIP_REACH = 0.5f
 
         /** Start/end farther than this from the letters isn't used to learn the user's offset. */
         const val MAX_LEARN_OFFSET = 1.2f

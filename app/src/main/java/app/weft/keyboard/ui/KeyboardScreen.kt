@@ -117,7 +117,7 @@ internal class KeyHandlers(
     val onCursor: (Int) -> Unit,
     val popup: AlternatesPopup,
     /** Swipe points in key units; done = finger lifted (commit), otherwise a live preview. */
-    val onSwipe: (xs: FloatArray, ys: FloatArray, done: Boolean) -> Unit,
+    val onSwipe: (xs: FloatArray, ys: FloatArray, times: LongArray, done: Boolean) -> Unit,
 )
 
 @Composable
@@ -132,7 +132,7 @@ fun KeyboardScreen(
     onRemoveSuggestion: (String) -> Unit,
     onAlternate: (String) -> Unit,
     onCursor: (Int) -> Unit,
-    onSwipe: (FloatArray, FloatArray, Boolean) -> Unit,
+    onSwipe: (FloatArray, FloatArray, LongArray, Boolean) -> Unit,
 ) {
     val popup = remember { AlternatesPopup() }
     val currentOnAlternate by rememberUpdatedState(onAlternate)

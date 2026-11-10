@@ -154,7 +154,7 @@ app/src/main/java/app/weft/keyboard/
 4. ~~Settings~~ — done: vibration strength, key height, number row, prefer offline voice.
 5. **Large screens** — floating, one-handed and split layouts for tablets and foldables.
 6. ~~Gesture typing~~ — first version done. Improvements to come back to
-   (learning from real use, ML decoder, timing, multi-word swipes) are listed in
+   (ML decoder, multi-word swipes, per-user tuning) are listed in
    [docs/swipe-typing.md](docs/swipe-typing.md#future-improvements).
 7. **More languages** — English variants (US, UK, Canada, Australia) done; other
    languages need layouts and dictionaries per subtype.

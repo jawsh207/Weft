@@ -431,9 +431,10 @@ class WeftKeyboardService :
 
     /**
      * A swipe in progress ([done] = false: preview the best guess in the strip)
-     * or finished (type it). Points are in key units from [SwipeArea].
+     * or finished (type it). Points are in key units from [SwipeArea], [times]
+     * when each was touched.
      */
-    private fun onSwipe(xs: FloatArray, ys: FloatArray, done: Boolean) {
+    private fun onSwipe(xs: FloatArray, ys: FloatArray, times: LongArray, done: Boolean) {
         val decoder = swipeDecoder ?: return
         state.toolsOpen = false
         state.pendingRemoval = null
@@ -444,7 +445,7 @@ class WeftKeyboardService :
         swipeJob?.cancel()
         if (done) {
             suggestJob?.cancel()
-            val words = decoder.decode(xs, ys, previous, before = before).map { applyShift(it.word) }
+            val words = decoder.decode(xs, ys, previous, before = before, times = times).map { applyShift(it.word) }
             if (words.isEmpty()) return
             state.message = null
             typing.onSwipe(editor, words, xs, ys)
@@ -452,7 +453,7 @@ class WeftKeyboardService :
             return
         }
         swipeJob = lifecycleScope.launch {
-            val words = withContext(Dispatchers.Default) { decoder.decode(xs, ys, previous, before = before) }
+            val words = withContext(Dispatchers.Default) { decoder.decode(xs, ys, previous, before = before, times = times) }
                 .map { applyShift(it.word) }
             if (words.isNotEmpty()) {
                 state.suggestions = listOf(
