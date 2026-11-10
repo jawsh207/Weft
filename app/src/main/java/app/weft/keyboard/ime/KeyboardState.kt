@@ -52,7 +52,7 @@ class KeyboardState {
     var keyHeight by mutableStateOf(KeyHeight.Normal)
     var numberRow by mutableStateOf(false)
 
-    /** Swipe trail, lit letters and the floating best guess (Settings › Swipe trail and preview). */
+    /** Tapered swipe trail and lit letters (Settings › Swipe › Enhanced visuals); off shows a plain trail. */
     var swipeVisuals by mutableStateOf(true)
 
 

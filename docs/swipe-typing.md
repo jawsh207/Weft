@@ -87,7 +87,8 @@ Come back to these, roughly in order of value:
 5. **Swipe across space.** Multiple words in one gesture, and swiping on the
    symbols page.
 6. ~~**Look and feel.**~~ *Done:* the trail tapers and fades toward its tail,
-   letters light up as the path crosses them, and a bubble above the finger
-   shows the best guess (Settings › Swipe trail and preview turns these off).
+   and letters light up as the path crosses them (Settings › Swipe › Enhanced
+   visuals; off shows a plain trail). The best guess shows as the middle
+   suggestion; a bubble above the finger was tried and removed as redundant.
 7. **More languages and layouts.** The decoder only needs key centres, so it
    works for any layout once dictionaries exist (see the roadmap).

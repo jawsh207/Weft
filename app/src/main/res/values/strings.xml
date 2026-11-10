@@ -53,7 +53,7 @@
     <string name="settings_page_typing">Typing</string>
     <string name="settings_page_typing_summary">Suggestions, autocorrect, emoji suggestions</string>
     <string name="settings_page_swipe">Swipe typing</string>
-    <string name="settings_page_swipe_summary">Swipe on or off, trail and preview</string>
+    <string name="settings_page_swipe_summary">Swipe on or off, enhanced visuals</string>
     <string name="settings_page_learning">Learning</string>
     <string name="settings_page_learning_summary">Words, pairs and swipe habits Weft has learned</string>
     <string name="settings_page_keys">Keys and feel</string>
