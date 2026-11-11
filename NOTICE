@@ -1,0 +1,39 @@
+Weft
+Copyright 2026 jawsh207
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+Releases up to v0.11.0 were published under GPL-3.0-only.
+
+Third-party data
+================
+
+The bundled dictionaries (app/src/main/assets/dictionaries) are built by
+tools/dictgen from the sources below. Each keeps its own license; the same
+list is stored inside every dictionary and shown in the app under
+Settings > About.
+
+- AOSP LatinIME word lists. Apache-2.0.
+  https://android.googlesource.com/platform/packages/inputmethods/LatinIME/
+- Leipzig Corpora Collection (English news). CC BY 4.0.
+  https://wortschatz.uni-leipzig.de/en/download
+- Tatoeba sentences. CC BY 2.0 FR. https://tatoeba.org
+- Mozilla Common Voice sentences. CC0-1.0. https://commonvoice.mozilla.org
+- Wikidata (names and places). CC0-1.0. https://www.wikidata.org
+- GeoNames (cities). CC BY 4.0. https://www.geonames.org
+- English Speller Database (ESDB, formerly SCOWL), regional spellings and
+  allow list. MIT-like; see tools/dictgen/sources/LICENSE-ESDB.txt.
+  https://github.com/en-wl/wordlist
+- Hunspell en_US word list (fallback allow list, derived from SCOWL). MIT-like.
+
+The emoji list (app/src/main/assets/emoji) is built by tools/emojigen from:
+
+- Unicode emoji data and CLDR annotations. Unicode License v3.
+- emojilib. MIT.
+- GitHub gemoji. MIT.
+
+Their license texts ship beside the list as LICENSE-*.txt.
+
+Test-only data, not part of the app: tools/bench/data holds held-out Tatoeba
+sentences (CC BY 2.0 FR) and Wikipedia's list of common misspellings
+(CC BY-SA 4.0). Those two files stay under their own licenses; see
+tools/bench/data/README.md.

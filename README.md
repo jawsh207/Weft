@@ -169,17 +169,21 @@ app/src/main/java/app/weft/keyboard/
   GitHub gemoji (MIT), built by [tools/emojigen](tools/emojigen/build_emoji.py)
   with each source's license shipped as `assets/emoji/LICENSE-*.txt`, plus
   Weft's own [extra_keywords.tsv](tools/emojigen/extra_keywords.tsv).
-- Dictionary data must come from openly licensed sources (see
-  [tools/dictgen/README.md](tools/dictgen/README.md)), and every source is
-  credited in the app.
+- Dictionary data must come from openly licensed sources with no share-alike
+  or copyleft terms (see [tools/dictgen/README.md](tools/dictgen/README.md)),
+  and every source is credited in the app and in [NOTICE](NOTICE).
 - Stays F-Droid compatible (dependency metadata blob is already disabled).
 
 ## License
 
-Weft is free software: you can redistribute it and/or modify it under the
-terms of the GNU General Public License as published by the Free Software
-Foundation, version 3 (GPL-3.0-only). It is distributed in the hope that it
-will be useful, but WITHOUT ANY WARRANTY. See [LICENSE](LICENSE) for the full
-text.
+Weft's code is licensed under the Apache License, Version 2.0, from v0.12.0
+on: see [LICENSE](LICENSE). It is distributed on an "AS IS" basis, WITHOUT
+WARRANTIES OR CONDITIONS OF ANY KIND. Releases up to v0.11.0 were published
+under GPL-3.0-only and stay available under that license.
+
+The bundled dictionaries and emoji list are built from third-party data that
+keeps its own licenses (Apache 2.0, CC0, MIT-style, Unicode, and CC BY, which
+requires credit). None of it is share-alike. [NOTICE](NOTICE) lists every
+source; the app credits them in Settings › About.
 
 Copyright (C) 2026 jawsh207

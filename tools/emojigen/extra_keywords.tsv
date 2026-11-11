@@ -1,5 +1,5 @@
 # Weft's own emoji search keywords, for everyday words CLDR doesn't include.
-# Part of Weft (GPL-3.0). Format: keyword<TAB>emoji, space separated, best first.
+# Part of Weft (Apache-2.0). Format: keyword<TAB>emoji, space separated, best first.
 lol	😂 🤣 😆
 lmao	🤣 😂
 rofl	🤣

@@ -16,7 +16,7 @@ Sources:
     keywords, available in ~100 languages (Unicode License v3)
   - emojilib (npm): community keywords in everyday English (MIT)
   - GitHub gemoji (db/emoji.json): shortcodes like "thumbsup", "joy" (MIT)
-  - Weft's own extra_keywords.tsv (GPL-3.0): ranking for common searches
+  - Weft's own extra_keywords.tsv (Apache-2.0): ranking for common searches
 
 Only the list is bundled; the emoji are drawn with the phone's own font.
 

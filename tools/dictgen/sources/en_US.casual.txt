@@ -1,5 +1,5 @@
 # Everyday texting words that spell-check lists leave out. Included exactly as
-# written, ranked by how often they appear in subtitles.
+# written. They rank at a fixed everyday level unless the sentences use them more.
 ok
 okay
 lol

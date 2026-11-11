@@ -8,7 +8,12 @@ Inputs (all optional, but at least one frequency source is required):
                      offensive-word flags and bigrams. Apache 2.0.
   --subtitles FILE   "word count" list, e.g. Hermit Dave's OpenSubtitles
                      FrequencyWords (en_full.txt). Casual-language tuning.
-                     Data: CC BY-SA 4.0.
+                     Data: CC BY-SA 4.0, so the shipped dictionaries don't use
+                     it; they use the next option instead.
+  --casual-from-sentences
+                     Count casual frequencies from --tatoeba and --sentences
+                     (see README, "Casual frequencies without subtitles").
+  --spoken FILE      Words written sentences under-count (fillers); boosted.
   --leipzig FILE     Leipzig Corpora Collection archive (.tar.gz) or extracted
                      folder. Its -words.txt and -co_n.txt files feed next-word
                      (bigram) data.
@@ -420,17 +425,23 @@ def merge(args) -> tuple[dict[str, Entry], list[dict], dict]:
     resolver = Resolver(entries)
     sub_by_lower: dict[str, int] = {}
 
+    counts: dict[str, int] = {}
     if args.subtitles:
         counts = read_counts(Path(args.subtitles))
+    elif args.casual_from_sentences:
+        counts = sentence_word_counts(args)
+    if counts:
         max_count = max(counts.values(), default=1)
         for word, count in counts.items():
             low = word.lower()
             sub_by_lower[low] = max(sub_by_lower.get(low, 0), log_scale(count, max_count))
         added = 0
         for word, count in counts.items():
-            if count < args.min_count:
-                continue
             target = resolver.resolve(word)
+            # Too rare to add as a new word. (From sentences, a known word seen once or
+            # twice still gets its low count: the collection is small.)
+            if count < args.min_count and (args.subtitles or target is None):
+                continue
             if target is None:
                 low = word.lower()
                 allowed = low in allow_lower if allow else True
@@ -443,12 +454,25 @@ def merge(args) -> tuple[dict[str, Entry], list[dict], dict]:
             else:
                 e = entries[target]
             e.sub = max(e.sub or 0, log_scale(count, max_count))
-        sources.append({
-            "name": "OpenSubtitles word frequencies (Hermit Dave, FrequencyWords)",
-            "license": "CC-BY-SA-4.0",
-            "url": "https://github.com/hermitdave/FrequencyWords",
-        })
-        print(f"  Subtitles: {len(counts):,} words read, {added:,} new", file=sys.stderr)
+        if args.subtitles:
+            sources.append({
+                "name": "OpenSubtitles word frequencies (Hermit Dave, FrequencyWords)",
+                "license": "CC-BY-SA-4.0",
+                "url": "https://github.com/hermitdave/FrequencyWords",
+            })
+            print(f"  Subtitles: {len(counts):,} words read, {added:,} new", file=sys.stderr)
+        else:
+            # The sentence sources are credited where they're read for word pairs.
+            # Words the sentences never use: a subtitle list would have given them a low
+            # count rather than none, so rank them as rarely used, not on AOSP alone.
+            unseen = 0
+            for e in entries.values():
+                # (Not capitalized twins of counted words, "Best" beside "best": those keep AOSP's rank.)
+                if e.aosp is not None and e.sub is None and e.word.lower() not in sub_by_lower:
+                    e.sub = log_scale(0.5, max_count)
+                    unseen += 1
+            print(f"  Casual frequencies from sentences: {len(counts):,} words counted, {added:,} new, "
+                  f"{unseen:,} AOSP words unseen", file=sys.stderr)
 
     if args.casual:
         added = 0
@@ -459,7 +483,11 @@ def merge(args) -> tuple[dict[str, Entry], list[dict], dict]:
                     e = resolver.add(word)
                     added += 1
                 e.not_a_word = False
-                e.sub = max(e.sub or 0, sub_by_lower.get(word.lower(), 110))
+                if args.subtitles:
+                    e.sub = max(e.sub or 0, sub_by_lower.get(word.lower(), 110))
+                else:
+                    # Sentence collections barely contain texting words: don't rank them by that.
+                    e.sub = max(e.sub or 0, sub_by_lower.get(word.lower(), 0), 110)
         print(f"  Casual list: {added:,} words added", file=sys.stderr)
 
     if args.leipzig:
@@ -512,6 +540,69 @@ def merge(args) -> tuple[dict[str, Entry], list[dict], dict]:
 
     return entries, sources, header
 
+
+def sentence_word_counts(args) -> dict[str, int]:
+    """
+    Casual word frequencies counted from the conversational sentence sources
+    (Tatoeba minus the benchmark's sentences, and any --sentences files), for
+    builds without a subtitle frequency list. Lowercased, like that list.
+
+    Tatoeba has favourite subjects (a few prolific contributors, stock names):
+    a word's Tatoeba count is capped at TATOEBA_CAP times what its rate in the
+    other sentences (the --sentences files, or the Leipzig news text) predicts.
+    Words in the --spoken lists are multiplied by --spoken-boost.
+    """
+    def count(sentences) -> tuple[dict[str, int], int]:
+        counts: dict[str, int] = {}
+        total = 0
+        for sentence in sentences:
+            for chunk in chunks_of(sentence):
+                for token in chunk:
+                    word = token.lower()
+                    if is_valid_word(word):
+                        counts[word] = counts.get(word, 0) + 1
+                        total += 1
+        return counts, total
+
+    held_out: set[str] = set()
+    tatoeba: dict[str, int] = {}
+    tatoeba_total = 0
+    if args.tatoeba:
+        tatoeba, tatoeba_total = count(tatoeba_sentences(Path(args.tatoeba)))
+        held_out = tatoeba_held_out(Path(args.tatoeba))
+    other: dict[str, int] = {}
+    other_total = 0
+    for spec in args.sentences or []:
+        c, n = count(plain_sentences(Path(spec.split("|", 3)[3]), held_out))
+        other_total += n
+        for w, k in c.items():
+            other[w] = other.get(w, 0) + k
+    news, news_total = count(leipzig_sentences(Path(args.leipzig))) if args.leipzig else ({}, 0)
+
+    counts = dict(other)
+    capped = 0
+    for w, k in tatoeba.items():
+        if other_total or news_total:
+            rate = max((other.get(w, 0) + 0.5) / other_total if other_total else 0,
+                       (news.get(w, 0) + 0.5) / news_total if news_total else 0)
+            limit = max(1, round(TATOEBA_CAP * rate * tatoeba_total))
+            if k > limit:
+                k = limit
+                capped += 1
+        counts[w] = counts.get(w, 0) + k
+    spoken: set[str] = set()
+    for path in args.spoken or []:
+        spoken |= {w.lower() for w in read_word_set(Path(path))}
+    for w in spoken:
+        if w in counts:
+            counts[w] = round(counts[w] * args.spoken_boost)
+    print(f"  Sentence counts: Tatoeba {tatoeba_total:,} words ({capped:,} capped), "
+          f"other {other_total:,}, news reference {news_total:,}, {len(spoken)} spoken words boosted",
+          file=sys.stderr)
+    return counts
+
+
+TATOEBA_CAP = 5
 
 NAME_KINDS_WITH_PAIRS = {"place", "country", "region", "org"}
 
@@ -759,6 +850,11 @@ def main() -> None:
     p.add_argument("--description", default=None, help="Human-readable name, e.g. 'English (US)'")
     p.add_argument("--aosp")
     p.add_argument("--subtitles")
+    p.add_argument("--casual-from-sentences", action="store_true",
+                   help="Without --subtitles: count casual word frequencies from --tatoeba and --sentences")
+    p.add_argument("--spoken", action="append",
+                   help="With --casual-from-sentences: words under-counted in written sentences")
+    p.add_argument("--spoken-boost", type=float, default=32)
     p.add_argument("--leipzig")
     p.add_argument("--allow", action="append")
     p.add_argument("--casual", action="append")
@@ -769,6 +865,7 @@ def main() -> None:
     p.add_argument("--variants")
     p.add_argument("--variant-out", action="append", metavar="REGION=PATH")
     p.add_argument("--out", required=True, help="Output .ekd path")
+    p.add_argument("--words-out", help="Also write the kept words as 'word<TAB>frequency<TAB>flags'")
     p.add_argument("--max-words", type=int, default=150_000)
     p.add_argument("--min-count", type=int, default=3, help="Ignore subtitle words seen fewer times")
     p.add_argument("--casual-weight", type=float, default=0.4,
@@ -794,6 +891,11 @@ def main() -> None:
         e.word: (final_frequency(e, args.casual_weight), FLAG_OFFENSIVE if e.offensive else 0)
         for e in kept
     }
+
+    if args.words_out:
+        with open(args.words_out, "w", encoding="utf-8") as f:
+            for e in kept:
+                f.write(f"{e.word}\t{words[e.word][0]}\t{words[e.word][1]}\n")
 
     # Next-word data from sentences (Leipzig news, Tatoeba conversation).
     context = SentenceCounts(words)

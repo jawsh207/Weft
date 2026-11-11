@@ -28,19 +28,44 @@ python3 tools/dictgen/make_dict.py en_US --max-words 120000 --casual-weight 0.5
 | Source | Role | License |
 |---|---|---|
 | AOSP LatinIME word lists | Base frequencies, offensive flags, some next-word pairs | Apache 2.0 |
-| OpenSubtitles frequencies (Hermit Dave's FrequencyWords) | Tunes rankings toward casual, conversational language | CC BY-SA 4.0 |
 | Leipzig Corpora Collection | Next-word pairs (`-co_n.txt`) | CC BY 4.0 |
-| SCOWL (or a Hunspell `.dic`) | Allow list that filters junk from subtitle-only words | MIT-like |
+| SCOWL (or a Hunspell `.dic`) | Allow list that filters junk from words only the sentences have | MIT-like |
 | `sources/en_US.casual.txt` | Texting words spell-check lists omit ("lol", "idk", lowercase "ok") | part of this repo |
-| Tatoeba sentences | Everyday sentences for word pairs and three-word context (every 50th sentence is held out for the benchmark) | CC BY 2.0 FR |
-| Mozilla Common Voice sentences (hand-written ones; the Wikipedia extracts are left out as too formal) | More everyday sentences for word pairs and three-word context; any matching a held-out benchmark sentence are skipped | CC0 |
-| Leipzig sentences (same archive) | Three-word context from news text | CC BY 4.0 |
+| `sources/en_US.spoken.txt` | Fillers and interjections ("yeah", "gonna", "hmm") that written sentences under-count; their counts are multiplied by 32 | part of this repo |
+| Tatoeba sentences | Casual word frequencies, and everyday sentences for word pairs and three-word context (every 50th sentence is held out for the benchmark) | CC BY 2.0 FR |
+| Mozilla Common Voice sentences (hand-written ones; the Wikipedia extracts are left out as too formal) | The same as Tatoeba; any matching a held-out benchmark sentence are skipped | CC0 |
+| Leipzig sentences (same archive) | Three-word context from news text; a reference for capping Tatoeba's counts | CC BY 4.0 |
 | Wikidata and GeoNames (`sources/en.names.tsv`, from `fetch_names.py`) | Names, countries, demonyms, regions, brands (Wikidata); cities (GeoNames) | CC0; CC BY 4.0 |
 | ESDB, formerly SCOWL (`sources/en_variants.tsv`, from `make_variants.py`) | US → UK / Canadian / Australian spellings | MIT-like, see `sources/LICENSE-ESDB.txt` |
 
-All are compatible with the app's GPL-3.0 license. The CC BY / CC BY-SA sources
-require attribution: the builder records every source in the dictionary's
-metadata, and the app's settings screen lists them.
+None of these is share-alike or copyleft, so the dictionaries can ship with
+the Apache-2.0 app. The CC BY sources require attribution: the builder records
+every source in the dictionary's metadata, the app's settings screen lists
+them, and the repo's NOTICE file names them.
+
+### Casual frequencies without subtitles
+
+Until v0.11.0 an OpenSubtitles frequency list (CC BY-SA 4.0) tuned rankings
+toward conversational language. Its share-alike terms don't fit an Apache-2.0
+app, so since Nov 2026 the builder counts casual frequencies itself
+(`--casual-from-sentences`, set by `"casualFromSentences"` in the source list)
+from the Tatoeba and Common Voice sentences, with four corrections:
+
+- words the sentences never use rank as rarely used (as a huge subtitle list
+  would have ranked them), not on AOSP's encyclopedic ranking alone;
+- a word's Tatoeba count is capped at five times what its rate in the Common
+  Voice sentences or the news text predicts, because Tatoeba has favourite
+  subjects ("Layla", "Berber", "Esperanto");
+- spoken fillers are boosted (see `en_US.spoken.txt`);
+- texting words from the casual list keep a fixed everyday level.
+
+Measured against the subtitle-based dictionary on the same tests and swipe
+words: misspellings fixed 69.4% → 70.7%, next word in top 3 36.7% → 36.8%,
+keystrokes saved 45.5% → 46.5% (the benchmark's sentences are Tatoeba's, so
+this flatters the new counts a little), swipe top-1 96.6% → 96.0% straight,
+92.3% → 91.2% natural, 83.6% → 83.0% hurried. About 2,600 of the 150,000 words
+differ: film and TV names and subtitle stage directions out, newer words
+("COVID", "blockchain") in. `--subtitles` still works for private builds.
 
 If a download fails, `make_dict.py` prints where else to get the file. Put it in
 `cache/<locale>/` under the file name listed in the JSON and rerun.
