@@ -176,7 +176,7 @@ app/src/main/java/app/weft/keyboard/
 
 ## License
 
-Weft's code is licensed under the Apache License, Version 2.0, from v0.12.0
+Weft's code is licensed under the Apache License, Version 2.0, from v1.0.0
 on: see [LICENSE](LICENSE). It is distributed on an "AS IS" basis, WITHOUT
 WARRANTIES OR CONDITIONS OF ANY KIND. Releases up to v0.11.0 were published
 under GPL-3.0-only and stay available under that license.
