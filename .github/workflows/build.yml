@@ -108,6 +108,21 @@ jobs:
           echo "${{ secrets.WEFT_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/weft.jks"
           echo "WEFT_KEYSTORE_FILE=$RUNNER_TEMP/weft.jks" >> "$GITHUB_ENV"
 
+      # Wikipedia's misspellings list is share-alike, so it isn't in the repo: fetch it
+      # for the benchmark. One cached copy keeps scores comparable between runs.
+      - name: Cache benchmark downloads
+        uses: actions/cache@v4
+        with:
+          path: tools/bench/cache
+          key: bench-misspellings-v1
+
+      - name: Download misspellings for the benchmark
+        run: |
+          if [ ! -s tools/bench/cache/misspellings_en.tsv ]; then
+            python3 tools/bench/make_bench.py --misspellings \
+              || echo "::warning title=Benchmark::Couldn't download the misspellings list; that part of the benchmark is skipped."
+          fi
+
       - name: Unit tests
         run: |
           ./gradlew --no-daemon testDebugUnitTest 2>&1 | tee gradle-test.log
@@ -159,8 +174,11 @@ jobs:
           import glob, html, re
           for f in sorted(glob.glob("app/build/test-results/testDebugUnitTest/*.xml")):
               text = html.unescape(open(f, encoding="utf-8", errors="replace").read())
-              for line in re.findall(r"^(?:Benchmark|Swipe accuracy|Swipe timing)[^:\n]*: .*$", text, re.M):
-                  print(f"::notice title=Benchmark::{line}")
+              # One notice per test class (GitHub shows at most ten per step); the first
+              # line of a test's output follows "<![CDATA[" rather than starting a line.
+              lines = re.findall(r"(?:^|\[)((?:Benchmark|Swipe accuracy|Swipe timing)[^:\n]*: .*)$", text, re.M)
+              if lines:
+                  print("::notice title=Benchmark::" + "%0A".join(lines))
           PY
 
       - name: Upload test reports

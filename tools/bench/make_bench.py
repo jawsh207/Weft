@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
 """
-Builds the typing benchmark data in tools/bench/data/ (committed, so tests and
-anyone can rerun the benchmark without downloading anything):
+Builds the typing benchmark data.
 
-  sentences_en.txt     Held-out English sentences from Tatoeba (every sentence
-                       whose id is a multiple of 50). The dictionary builder
-                       never trains on these, so prediction scores are honest.
-  misspellings_en.tsv  "typo<TAB>correct" pairs from Wikipedia's lists of
-                       common misspellings.
+  tools/bench/data/sentences_en.txt (committed)
+      Held-out English sentences from Tatoeba (every sentence whose id is a
+      multiple of 50). The dictionary builder never trains on these, so
+      prediction scores are honest.
 
-    python3 tools/bench/make_bench.py --tatoeba tools/dictgen/cache/en_US/eng_sentences.tsv.bz2
+        python3 tools/bench/make_bench.py --tatoeba tools/dictgen/cache/en_US/eng_sentences.tsv.bz2
+
+  tools/bench/cache/misspellings_en.tsv (downloaded, never committed)
+      "typo<TAB>correct" pairs from Wikipedia's lists of common misspellings.
+      That list is CC BY-SA 4.0, so it isn't stored in this Apache-2.0 repo:
+      CI downloads it before the tests, and so can you:
+
+        python3 tools/bench/make_bench.py --misspellings
 
 Sources and licenses: see tools/bench/data/README.md.
 """
@@ -24,6 +29,7 @@ import urllib.request
 from pathlib import Path
 
 OUT = Path(__file__).resolve().parent / "data"
+CACHE = Path(__file__).resolve().parent / "cache"
 MISSPELLINGS_URL = (
     "https://en.wikipedia.org/w/index.php?title=Wikipedia:Lists_of_common_misspellings/"
     "For_machines&action=raw"
@@ -69,20 +75,29 @@ def misspellings() -> list[tuple[str, str]]:
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--tatoeba", required=True)
+    p.add_argument("--tatoeba", help="Tatoeba export: write the held-out sentences")
     p.add_argument("--sentences", type=int, default=1500)
+    p.add_argument("--misspellings", action="store_true",
+                   help="Download Wikipedia's misspellings into tools/bench/cache/ (git-ignored)")
     a = p.parse_args()
-    OUT.mkdir(parents=True, exist_ok=True)
+    if not (a.tatoeba or a.misspellings):
+        p.error("nothing to do: pass --tatoeba FILE and/or --misspellings")
 
-    sentences = held_out_sentences(Path(a.tatoeba), a.sentences)
-    (OUT / "sentences_en.txt").write_text("\n".join(sentences) + "\n", encoding="utf-8")
-    print(f"sentences_en.txt: {len(sentences):,} held-out sentences", file=sys.stderr)
+    if a.tatoeba:
+        OUT.mkdir(parents=True, exist_ok=True)
+        sentences = held_out_sentences(Path(a.tatoeba), a.sentences)
+        (OUT / "sentences_en.txt").write_text("\n".join(sentences) + "\n", encoding="utf-8")
+        print(f"sentences_en.txt: {len(sentences):,} held-out sentences", file=sys.stderr)
 
-    pairs = misspellings()
-    with open(OUT / "misspellings_en.tsv", "w", encoding="utf-8") as f:
-        for typo, right in pairs:
-            f.write(f"{typo}\t{right}\n")
-    print(f"misspellings_en.tsv: {len(pairs):,} pairs", file=sys.stderr)
+    if a.misspellings:
+        pairs = misspellings()
+        if len(pairs) < 1000:
+            sys.exit(f"only {len(pairs)} misspellings parsed: the page may have changed")
+        CACHE.mkdir(parents=True, exist_ok=True)
+        with open(CACHE / "misspellings_en.tsv", "w", encoding="utf-8") as f:
+            for typo, right in pairs:
+                f.write(f"{typo}\t{right}\n")
+        print(f"cache/misspellings_en.tsv: {len(pairs):,} pairs", file=sys.stderr)
 
 
 if __name__ == "__main__":

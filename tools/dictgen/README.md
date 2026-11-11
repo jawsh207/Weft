@@ -157,3 +157,5 @@ python3 tools/dictgen/build_dict.py --locale en_US \
 misspellings, words wrongly changed, next-word predictions and keystrokes saved
 on held-out Tatoeba sentences (`TypingBenchmarkTest`; CI shows the numbers on
 each Build run). Run it before and after changing the pipeline or the ranking.
+The misspellings list is share-alike and isn't stored in the repo: download it
+first with `python3 tools/bench/make_bench.py --misspellings` (CI does).

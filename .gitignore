@@ -16,4 +16,6 @@
 
 # Dictionary source downloads
 /tools/dictgen/cache/
+# Benchmark downloads (share-alike test data, never committed)
+/tools/bench/cache/
 __pycache__/

@@ -13,6 +13,9 @@ import java.io.File
  *
  *  - Autocorrect: Wikipedia's common misspellings. Fixed = space gives the
  *    right word; wrong = it gives another word; missed = it leaves the typo.
+ *    That list is share-alike, so it isn't in the repo: CI downloads it to
+ *    tools/bench/cache, and so does `python3 tools/bench/make_bench.py
+ *    --misspellings`. Without it this part is skipped (and says so).
  *  - False corrections: real words from held-out sentences that space would
  *    wrongly change.
  *  - Next word: how often the next word is among the three predictions.
@@ -37,7 +40,9 @@ class TypingBenchmarkTest {
     @Test
     fun autocorrect() {
         val (suggester, dict, data) = setUp() ?: return assumeTrue("benchmark data not built", false)
-        val pairs = File(data, "misspellings_en.tsv").readLines()
+        val misspellings = find("../tools/bench/cache/misspellings_en.tsv", "tools/bench/cache/misspellings_en.tsv")
+        if (misspellings == null) report("autocorrect on misspellings skipped: list not downloaded (see tools/bench/data/README.md)")
+        val pairs = (misspellings?.readLines() ?: emptyList())
             .mapNotNull { line -> line.split('\t').takeIf { it.size == 2 }?.let { it[0] to it[1] } }
             // Only typos that aren't real words, of words the dictionary knows.
             .filter { (typo, right) -> !suggester.isKnown(typo) && dict.findIgnoreCase(right) >= 0 }
@@ -52,7 +57,7 @@ class TypingBenchmarkTest {
             }
         }
         val missed = pairs.size - fixed - wrong
-        report(
+        if (misspellings != null) report(
             "autocorrect fixed %.1f%%, wrong word %.1f%%, left as typed %.1f%% (%d misspellings)".format(
                 pct(fixed, pairs.size), pct(wrong, pairs.size), pct(missed, pairs.size), pairs.size,
             ),
@@ -83,7 +88,7 @@ class TypingBenchmarkTest {
         }
         report("false corrections %.2f%% of %d real words".format(pct(changed, words), words))
         report("unknown words changed %.1f%% of %d distinct".format(pct(unknownChanged.size, unknown.size), unknown.size))
-        assertTrue("autocorrect fixes too few misspellings", pct(fixed, pairs.size) >= MIN_FIXED)
+        if (misspellings != null) assertTrue("autocorrect fixes too few misspellings", pct(fixed, pairs.size) >= MIN_FIXED)
         assertTrue("autocorrect changes too many real words", pct(changed, words) <= MAX_FALSE)
     }
 

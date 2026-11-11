@@ -34,6 +34,6 @@ The emoji list (app/src/main/assets/emoji) is built by tools/emojigen from:
 Their license texts ship beside the list as LICENSE-*.txt.
 
 Test-only data, not part of the app: tools/bench/data holds held-out Tatoeba
-sentences (CC BY 2.0 FR) and Wikipedia's list of common misspellings
-(CC BY-SA 4.0). Those two files stay under their own licenses; see
-tools/bench/data/README.md.
+sentences (CC BY 2.0 FR). The benchmark also uses Wikipedia's list of common
+misspellings (CC BY-SA 4.0), which is not stored in this repository: the
+tests download it when they run. See tools/bench/data/README.md.
