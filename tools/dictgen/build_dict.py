@@ -400,6 +400,18 @@ class Resolver:
         return e
 
 
+def allow_source(path: Path) -> dict:
+    """How an allow list is credited in the dictionary (and so in the app's About screen)."""
+    name = path.name.lower()
+    if name.endswith(".dic"):
+        return {"name": "Hunspell English word list (from SCOWL), allow list",
+                "license": "MIT-like", "url": "http://wordlist.aspell.net"}
+    if "scowl" in name:
+        return {"name": "SCOWL word list, allow list",
+                "license": "MIT-like", "url": "http://wordlist.aspell.net"}
+    return {"name": f"Allow list: {path.name}", "license": "see source", "url": ""}
+
+
 def merge(args) -> tuple[dict[str, Entry], list[dict], dict]:
     entries: dict[str, Entry] = {}
     sources: list[dict] = []
@@ -531,8 +543,8 @@ def merge(args) -> tuple[dict[str, Entry], list[dict], dict]:
         }]
 
     if allow:
-        sources.append({"name": "Allow list(s): " + ", ".join(Path(a).name for a in args.allow),
-                        "license": "see source", "url": ""})
+        for a in args.allow:
+            sources.append(allow_source(Path(a)))
 
     # Drop blocked and shortcut-only entries.
     for w in [w for w, e in entries.items() if e.not_a_word or w.lower() in block_lower]:
