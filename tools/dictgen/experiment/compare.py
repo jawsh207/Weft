@@ -20,7 +20,9 @@ rose = sorted(common, key=lambda w: (base[w] - new[w], w))[:150]
 spot = """gonna wanna gotta kinda sorta yeah yep nope nah hey hi ok okay lol omg idk btw haha hmm ugh wow dude bro
 guys awesome cool crap damn hell stuff thing really pretty totally literally basically actually whatever anyway
 mom dad kid kids texted texting selfie emoji wifi app apps google email phone tonight tomorrow weekend pizza coffee
-beer movie cute funny weird sorry thanks please love hate miss""".split()
+beer movie cute funny weird sorry thanks please love hate miss
+Layla Tom Mary Berber Kabyle Esperanto Algerians hijab coefficients unincorporated redesignated topological
+don uh um huh whoa outta ain mm hiya meh""".split()
 
 
 def cells(words, table, other=None):

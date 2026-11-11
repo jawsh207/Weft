@@ -456,8 +456,15 @@ def merge(args) -> tuple[dict[str, Entry], list[dict], dict]:
             print(f"  Subtitles: {len(counts):,} words read, {added:,} new", file=sys.stderr)
         else:
             # The sentence sources are credited where they're read for word pairs.
-            print(f"  Casual frequencies from sentences: {len(counts):,} words counted, {added:,} new",
-                  file=sys.stderr)
+            # Words the sentences never use: a subtitle list would have given them a low
+            # count rather than none, so rank them as rarely used, not on AOSP alone.
+            unseen = 0
+            for e in entries.values():
+                if e.aosp is not None and e.sub is None:
+                    e.sub = log_scale(0.5, max_count)
+                    unseen += 1
+            print(f"  Casual frequencies from sentences: {len(counts):,} words counted, {added:,} new, "
+                  f"{unseen:,} AOSP words unseen", file=sys.stderr)
 
     if args.casual:
         added = 0
@@ -468,7 +475,11 @@ def merge(args) -> tuple[dict[str, Entry], list[dict], dict]:
                     e = resolver.add(word)
                     added += 1
                 e.not_a_word = False
-                e.sub = max(e.sub or 0, sub_by_lower.get(word.lower(), 110))
+                if args.subtitles:
+                    e.sub = max(e.sub or 0, sub_by_lower.get(word.lower(), 110))
+                else:
+                    # Sentence collections barely contain texting words: don't rank them by that.
+                    e.sub = max(e.sub or 0, sub_by_lower.get(word.lower(), 0), 110)
         print(f"  Casual list: {added:,} words added", file=sys.stderr)
 
     if args.leipzig:
@@ -527,24 +538,63 @@ def sentence_word_counts(args) -> dict[str, int]:
     Casual word frequencies counted from the conversational sentence sources
     (Tatoeba minus the benchmark's sentences, and any --sentences files), for
     builds without a subtitle frequency list. Lowercased, like that list.
+
+    Tatoeba has favourite subjects (a few prolific contributors, stock names):
+    a word's Tatoeba count is capped at TATOEBA_CAP times what its rate in the
+    other sentences (the --sentences files, or the Leipzig news text) predicts.
+    Words in the --spoken lists are multiplied by --spoken-boost.
     """
-    counts: dict[str, int] = {}
-    held_out: set[str] = set()
-    streams = []
-    if args.tatoeba:
-        streams.append(tatoeba_sentences(Path(args.tatoeba)))
-        held_out = tatoeba_held_out(Path(args.tatoeba))
-    for spec in args.sentences or []:
-        streams.append(plain_sentences(Path(spec.split("|", 3)[3]), held_out))
-    for sentences in streams:
+    def count(sentences) -> tuple[dict[str, int], int]:
+        counts: dict[str, int] = {}
+        total = 0
         for sentence in sentences:
             for chunk in chunks_of(sentence):
                 for token in chunk:
                     word = token.lower()
                     if is_valid_word(word):
                         counts[word] = counts.get(word, 0) + 1
+                        total += 1
+        return counts, total
+
+    held_out: set[str] = set()
+    tatoeba: dict[str, int] = {}
+    tatoeba_total = 0
+    if args.tatoeba:
+        tatoeba, tatoeba_total = count(tatoeba_sentences(Path(args.tatoeba)))
+        held_out = tatoeba_held_out(Path(args.tatoeba))
+    other: dict[str, int] = {}
+    other_total = 0
+    for spec in args.sentences or []:
+        c, n = count(plain_sentences(Path(spec.split("|", 3)[3]), held_out))
+        other_total += n
+        for w, k in c.items():
+            other[w] = other.get(w, 0) + k
+    news, news_total = count(leipzig_sentences(Path(args.leipzig))) if args.leipzig else ({}, 0)
+
+    counts = dict(other)
+    capped = 0
+    for w, k in tatoeba.items():
+        if other_total or news_total:
+            rate = max((other.get(w, 0) + 0.5) / other_total if other_total else 0,
+                       (news.get(w, 0) + 0.5) / news_total if news_total else 0)
+            limit = max(1, round(TATOEBA_CAP * rate * tatoeba_total))
+            if k > limit:
+                k = limit
+                capped += 1
+        counts[w] = counts.get(w, 0) + k
+    spoken: set[str] = set()
+    for path in args.spoken or []:
+        spoken |= {w.lower() for w in read_word_set(Path(path))}
+    for w in spoken:
+        if w in counts:
+            counts[w] = round(counts[w] * args.spoken_boost)
+    print(f"  Sentence counts: Tatoeba {tatoeba_total:,} words ({capped:,} capped), "
+          f"other {other_total:,}, news reference {news_total:,}, {len(spoken)} spoken words boosted",
+          file=sys.stderr)
     return counts
 
+
+TATOEBA_CAP = 5
 
 NAME_KINDS_WITH_PAIRS = {"place", "country", "region", "org"}
 
@@ -794,6 +844,9 @@ def main() -> None:
     p.add_argument("--subtitles")
     p.add_argument("--casual-from-sentences", action="store_true",
                    help="Without --subtitles: count casual word frequencies from --tatoeba and --sentences")
+    p.add_argument("--spoken", action="append",
+                   help="With --casual-from-sentences: words under-counted in written sentences")
+    p.add_argument("--spoken-boost", type=float, default=32)
     p.add_argument("--leipzig")
     p.add_argument("--allow", action="append")
     p.add_argument("--casual", action="append")

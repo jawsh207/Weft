@@ -99,6 +99,9 @@ def main() -> None:
         cmd += ["--subtitles", str(paths["subtitles"])]
     elif config.get("casualFromSentences"):
         cmd += ["--casual-from-sentences"]
+        spoken = HERE / "sources" / f"{locale}.spoken.txt"
+        if spoken.exists():
+            cmd += ["--spoken", str(spoken)]
     if paths.get("leipzig"):
         cmd += ["--leipzig", str(paths["leipzig"])]
     if paths.get("allow"):
