@@ -420,8 +420,12 @@ def merge(args) -> tuple[dict[str, Entry], list[dict], dict]:
     resolver = Resolver(entries)
     sub_by_lower: dict[str, int] = {}
 
+    counts: dict[str, int] = {}
     if args.subtitles:
         counts = read_counts(Path(args.subtitles))
+    elif args.casual_from_sentences:
+        counts = sentence_word_counts(args)
+    if counts:
         max_count = max(counts.values(), default=1)
         for word, count in counts.items():
             low = word.lower()
@@ -443,12 +447,17 @@ def merge(args) -> tuple[dict[str, Entry], list[dict], dict]:
             else:
                 e = entries[target]
             e.sub = max(e.sub or 0, log_scale(count, max_count))
-        sources.append({
-            "name": "OpenSubtitles word frequencies (Hermit Dave, FrequencyWords)",
-            "license": "CC-BY-SA-4.0",
-            "url": "https://github.com/hermitdave/FrequencyWords",
-        })
-        print(f"  Subtitles: {len(counts):,} words read, {added:,} new", file=sys.stderr)
+        if args.subtitles:
+            sources.append({
+                "name": "OpenSubtitles word frequencies (Hermit Dave, FrequencyWords)",
+                "license": "CC-BY-SA-4.0",
+                "url": "https://github.com/hermitdave/FrequencyWords",
+            })
+            print(f"  Subtitles: {len(counts):,} words read, {added:,} new", file=sys.stderr)
+        else:
+            # The sentence sources are credited where they're read for word pairs.
+            print(f"  Casual frequencies from sentences: {len(counts):,} words counted, {added:,} new",
+                  file=sys.stderr)
 
     if args.casual:
         added = 0
@@ -511,6 +520,30 @@ def merge(args) -> tuple[dict[str, Entry], list[dict], dict]:
         del entries[w]
 
     return entries, sources, header
+
+
+def sentence_word_counts(args) -> dict[str, int]:
+    """
+    Casual word frequencies counted from the conversational sentence sources
+    (Tatoeba minus the benchmark's sentences, and any --sentences files), for
+    builds without a subtitle frequency list. Lowercased, like that list.
+    """
+    counts: dict[str, int] = {}
+    held_out: set[str] = set()
+    streams = []
+    if args.tatoeba:
+        streams.append(tatoeba_sentences(Path(args.tatoeba)))
+        held_out = tatoeba_held_out(Path(args.tatoeba))
+    for spec in args.sentences or []:
+        streams.append(plain_sentences(Path(spec.split("|", 3)[3]), held_out))
+    for sentences in streams:
+        for sentence in sentences:
+            for chunk in chunks_of(sentence):
+                for token in chunk:
+                    word = token.lower()
+                    if is_valid_word(word):
+                        counts[word] = counts.get(word, 0) + 1
+    return counts
 
 
 NAME_KINDS_WITH_PAIRS = {"place", "country", "region", "org"}
@@ -759,6 +792,8 @@ def main() -> None:
     p.add_argument("--description", default=None, help="Human-readable name, e.g. 'English (US)'")
     p.add_argument("--aosp")
     p.add_argument("--subtitles")
+    p.add_argument("--casual-from-sentences", action="store_true",
+                   help="Without --subtitles: count casual word frequencies from --tatoeba and --sentences")
     p.add_argument("--leipzig")
     p.add_argument("--allow", action="append")
     p.add_argument("--casual", action="append")

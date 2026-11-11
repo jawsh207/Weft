@@ -1,0 +1,85 @@
+name: Experiment dictionary
+
+# Builds the dictionaries on this branch (not committed) and runs the tests, so
+# the benchmark numbers can be compared with main's.
+
+on:
+  push:
+    branches: ["experiment/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Hunspell word list
+        run: sudo apt-get update -q && sudo apt-get install -y -q hunspell-en-us
+
+      - name: Cache downloaded sources
+        uses: actions/cache@v4
+        with:
+          path: tools/dictgen/cache
+          key: dictgen-experiment-${{ hashFiles('tools/dictgen/sources/*.json') }}
+          restore-keys: dictgen-
+
+      - name: Build dictionaries
+        run: |
+          export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct -- tools/dictgen)
+          python3 tools/dictgen/make_dict.py en_US 2>&1 | tee dict.log
+          ls -l app/src/main/assets/dictionaries/
+          python3 - <<'PY'
+          import os
+          for line in open("dict.log", encoding="utf-8", errors="replace"):
+              line = line.strip()
+              if line and not line.startswith("Running:"):
+                  print(f"::notice title=Dictionary::{line[:300]}")
+          d = "app/src/main/assets/dictionaries"
+          for f in sorted(os.listdir(d)):
+              print(f"::notice title=Dictionary::{f} {os.path.getsize(os.path.join(d, f)):,} bytes")
+          PY
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install Android SDK packages
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37" "build-tools;36.0.0" || true
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests
+        continue-on-error: true
+        run: ./gradlew --no-daemon testDebugUnitTest
+
+      - name: Report benchmarks
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import glob, html, re
+          for f in sorted(glob.glob("app/build/test-results/testDebugUnitTest/*.xml")):
+              text = html.unescape(open(f, encoding="utf-8", errors="replace").read())
+              for line in re.findall(r"^(?:Benchmark|Swipe accuracy|Swipe timing)[^:\n]*: .*$", text, re.M):
+                  print(f"::notice title=Benchmark::{line}")
+              for m in re.finditer(r'<testcase name="([^"]+)" classname="([^"]+)"[^>]*>\s*<failure message="([^"]{0,300})', text):
+                  print(f"::warning title=Test failed::{m.group(2).rsplit('.', 1)[-1]}.{m.group(1)}: {m.group(3)}")
+          PY
+
+      - name: Upload dictionaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: dictionaries
+          path: app/src/main/assets/dictionaries/

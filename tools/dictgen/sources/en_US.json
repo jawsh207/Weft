@@ -1,6 +1,7 @@
 {
   "locale": "en_US",
   "description": "English (US)",
+  "casualFromSentences": true,
   "sources": {
     "aosp": {
       "url": "https://android.googlesource.com/platform/packages/inputmethods/LatinIME/+/refs/heads/main/dictionaries/en_US_wordlist.combined.gz?format=TEXT",
@@ -8,11 +9,6 @@
       "file": "en_US_wordlist.combined.gz",
       "license": "Apache-2.0",
       "fallback": "HeliBoard's maintained copies: https://codeberg.org/Helium314/aosp-dictionaries (wordlists folder)"
-    },
-    "subtitles": {
-      "url": "https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/en/en_full.txt",
-      "file": "en_full.txt",
-      "license": "CC-BY-SA-4.0"
     },
     "leipzig": {
       "url": "https://downloads.wortschatz-leipzig.de/corpora/eng_news_2023_1M.tar.gz",

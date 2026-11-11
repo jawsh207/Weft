@@ -97,6 +97,8 @@ def main() -> None:
         cmd += ["--aosp", str(paths["aosp"])]
     if paths.get("subtitles"):
         cmd += ["--subtitles", str(paths["subtitles"])]
+    elif config.get("casualFromSentences"):
+        cmd += ["--casual-from-sentences"]
     if paths.get("leipzig"):
         cmd += ["--leipzig", str(paths["leipzig"])]
     if paths.get("allow"):
