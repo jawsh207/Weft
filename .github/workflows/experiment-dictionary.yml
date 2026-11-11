@@ -72,8 +72,10 @@ jobs:
           import glob, html, re
           for f in sorted(glob.glob("app/build/test-results/testDebugUnitTest/*.xml")):
               text = html.unescape(open(f, encoding="utf-8", errors="replace").read())
-              for line in re.findall(r"^(?:Benchmark|Swipe accuracy|Swipe timing)[^:\n]*: .*$", text, re.M):
-                  print(f"::notice title=Benchmark::{line}")
+              # One notice per test class: GitHub shows at most ten notices per step.
+              lines = re.findall(r"^(?:Benchmark|Swipe accuracy|Swipe timing)[^:\n]*: .*$", text, re.M)
+              if lines:
+                  print("::notice title=Benchmark::" + "%0A".join(lines))
               for m in re.finditer(r'<testcase name="([^"]+)" classname="([^"]+)"[^>]*>\s*<failure message="([^"]{0,300})', text):
                   print(f"::warning title=Test failed::{m.group(2).rsplit('.', 1)[-1]}.{m.group(1)}: {m.group(3)}")
           PY
