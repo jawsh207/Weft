@@ -26,17 +26,17 @@
 - Swipe words: 377 listed, 0 not in this dictionary
 - Swipe accuracy (offset thumb): top-1 78.4% before learning, 94.7% after
 - Swipe words: 1000 listed, 0 not in this dictionary
-- Swipe timing (typical thumb, relaxed): top-1 92.2% without timing, 94.2% with (999 words)
+- Swipe timing (typical thumb, relaxed): top-1 92.4% without timing, 94.2% with (999 words)
 - Swipe timing (typical thumb, hurried): top-1 78.8% without timing, 80.2% with (999 words)
-- Swipe timing (stingy thumb, relaxed): top-1 91.8% without timing, 94.2% with (999 words)
-- Swipe timing (stingy thumb, hurried): top-1 79.5% without timing, 82.0% with (999 words)
+- Swipe timing (stingy thumb, relaxed): top-1 91.9% without timing, 94.2% with (999 words)
+- Swipe timing (stingy thumb, hurried): top-1 79.6% without timing, 82.2% with (999 words)
 - Swipe timing (steady thumb, relaxed): top-1 91.4% without timing, 93.2% with (999 words)
-- Swipe timing (steady thumb, hurried): top-1 78.3% without timing, 83.6% with (999 words)
+- Swipe timing (steady thumb, hurried): top-1 78.3% without timing, 83.7% with (999 words)
 - Swipe words: 377 listed, 0 not in this dictionary
 - Swipe accuracy: top-1 96.0%, top-3 100.0% (377 words)
 - Swipe accuracy (natural): top-1 91.2%, top-3 99.5%
 - Swipe accuracy (hurried): top-1 83.0%, top-3 95.0%
-- Benchmark: autocorrect fixed 70.2%, wrong word 6.8%, left as typed 23.0% (3954 misspellings)
+- Benchmark: autocorrect fixed 70.7%, wrong word 6.9%, left as typed 22.5% (3954 misspellings)
 - Benchmark: false corrections 0.00% of 11866 real words
 - Benchmark: unknown words changed 38.6% of 44 distinct
 - Benchmark: next word in top 3 36.8% (10286 words)
