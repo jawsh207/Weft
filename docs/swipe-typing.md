@@ -54,6 +54,12 @@ training data for a learned decoder later):
 | Natural | 92.6% | 93.4% | 99.7% |
 | Hurried | 67.9% | 84.1% | 96.6% |
 
+Since the dictionary stopped using subtitle frequencies (Nov 2026, see
+tools/dictgen/README.md), the test's sample is different words (it picks the
+dictionary's most common ones, 437 now), and CI reports 97.5% / 93.1% / 81.2%
+top-1. On the same words as before, the change cost about half a point
+(96.6 → 96.0, 92.3 → 91.2, 83.6 → 83.0).
+
 The natural set showed the decoder's weak spot: it only considered words whose
 letters the path passed within 0.95 of a key width, and hurried thumbs miss
 that. The radii are now 1.4 (ranking still prefers close paths), names get a
