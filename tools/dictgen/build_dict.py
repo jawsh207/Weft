@@ -432,9 +432,11 @@ def merge(args) -> tuple[dict[str, Entry], list[dict], dict]:
             sub_by_lower[low] = max(sub_by_lower.get(low, 0), log_scale(count, max_count))
         added = 0
         for word, count in counts.items():
-            if count < args.min_count:
-                continue
             target = resolver.resolve(word)
+            # Too rare to add as a new word. (From sentences, a known word seen once or
+            # twice still gets its low count: the collection is small.)
+            if count < args.min_count and (args.subtitles or target is None):
+                continue
             if target is None:
                 low = word.lower()
                 allowed = low in allow_lower if allow else True
