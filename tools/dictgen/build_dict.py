@@ -460,7 +460,8 @@ def merge(args) -> tuple[dict[str, Entry], list[dict], dict]:
             # count rather than none, so rank them as rarely used, not on AOSP alone.
             unseen = 0
             for e in entries.values():
-                if e.aosp is not None and e.sub is None:
+                # (Not capitalized twins of counted words, "Best" beside "best": those keep AOSP's rank.)
+                if e.aosp is not None and e.sub is None and e.word.lower() not in sub_by_lower:
                     e.sub = log_scale(0.5, max_count)
                     unseen += 1
             print(f"  Casual frequencies from sentences: {len(counts):,} words counted, {added:,} new, "
