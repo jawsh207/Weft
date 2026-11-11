@@ -8,7 +8,7 @@ on:
     branches: ["experiment/**"]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -33,21 +33,26 @@ jobs:
           key: dictgen-experiment-${{ hashFiles('tools/dictgen/sources/*.json') }}
           restore-keys: dictgen-
 
-      - name: Build dictionaries
+      # Build the replacement, then today's (main's source list), keeping both.
+      - name: Build both dictionaries
         run: |
           export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct -- tools/dictgen)
-          python3 tools/dictgen/make_dict.py en_US 2>&1 | tee dict.log
-          ls -l app/src/main/assets/dictionaries/
-          python3 - <<'PY'
-          import os
-          for line in open("dict.log", encoding="utf-8", errors="replace"):
-              line = line.strip()
-              if line and not line.startswith("Running:"):
-                  print(f"::notice title=Dictionary::{line[:300]}")
-          d = "app/src/main/assets/dictionaries"
-          for f in sorted(os.listdir(d)):
-              print(f"::notice title=Dictionary::{f} {os.path.getsize(os.path.join(d, f)):,} bytes")
-          PY
+          D=app/src/main/assets/dictionaries
+          mkdir -p "$RUNNER_TEMP/new" "$RUNNER_TEMP/base"
+          python3 tools/dictgen/make_dict.py en_US --words-out "$RUNNER_TEMP/new.tsv"
+          cp $D/*.ekdz "$RUNNER_TEMP/new/"
+          cp tools/dictgen/sources/en_US.json "$RUNNER_TEMP/en_US.json"
+          git show origin/main:tools/dictgen/sources/en_US.json > tools/dictgen/sources/en_US.json
+          python3 tools/dictgen/make_dict.py en_US --words-out "$RUNNER_TEMP/base.tsv"
+          cp $D/*.ekdz "$RUNNER_TEMP/base/"
+          cp "$RUNNER_TEMP/en_US.json" tools/dictgen/sources/en_US.json
+          # One fixed set of swipe words for both: the common words of today's dictionary.
+          for min in 150 135; do
+            awk -F'\t' -v m=$min '$2 >= m && $3 == 0 && $1 ~ /^[a-z]+$/ && length($1) >= 2 && length($1) <= 11 {print $1}' "$RUNNER_TEMP/base.tsv" | sort > "$RUNNER_TEMP/swipe_$min.txt"
+            echo "WEFT_SWIPE_WORDS_$min=$RUNNER_TEMP/swipe_$min.txt" >> "$GITHUB_ENV"
+            wc -l "$RUNNER_TEMP/swipe_$min.txt"
+          done
+          python3 tools/dictgen/experiment/compare.py "$RUNNER_TEMP/base.tsv" "$RUNNER_TEMP/new.tsv" tools/dictgen/experiment/words.md
 
       - uses: actions/setup-java@v5
         with:
@@ -61,27 +66,37 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Unit tests
+      - name: Tests with today's dictionary
         continue-on-error: true
-        run: ./gradlew --no-daemon testDebugUnitTest
+        run: |
+          cp "$RUNNER_TEMP"/base/*.ekdz app/src/main/assets/dictionaries/
+          ./gradlew --no-daemon testDebugUnitTest
+          mkdir -p "$RUNNER_TEMP/results-base" && cp app/build/test-results/testDebugUnitTest/*.xml "$RUNNER_TEMP/results-base/"
 
-      - name: Report benchmarks
-        if: always()
+      - name: Tests with the replacement dictionary
+        continue-on-error: true
+        run: |
+          cp "$RUNNER_TEMP"/new/*.ekdz app/src/main/assets/dictionaries/
+          ./gradlew --no-daemon cleanTestDebugUnitTest testDebugUnitTest
+          mkdir -p "$RUNNER_TEMP/results-new" && cp app/build/test-results/testDebugUnitTest/*.xml "$RUNNER_TEMP/results-new/"
+
+      - name: Write and commit the report
         run: |
           python3 - <<'PY'
-          import glob, html, re
-          for f in sorted(glob.glob("app/build/test-results/testDebugUnitTest/*.xml")):
-              text = html.unescape(open(f, encoding="utf-8", errors="replace").read())
-              # One notice per test class: GitHub shows at most ten notices per step.
-              lines = re.findall(r"(?:^|\[)((?:Benchmark|Swipe accuracy|Swipe timing)[^:\n]*: .*)$", text, re.M)
-              if lines:
-                  print("::notice title=Benchmark::" + "%0A".join(lines))
-              for m in re.finditer(r'<testcase name="([^"]+)" classname="([^"]+)"[^>]*>\s*<failure message="([^"]{0,300})', text):
-                  print(f"::warning title=Test failed::{m.group(2).rsplit('.', 1)[-1]}.{m.group(1)}: {m.group(3)}")
+          import glob, html, os, re
+          out = ["# Benchmarks on the same test code and the same swipe words", ""]
+          for label, key in (("Today's dictionary (with OpenSubtitles)", "base"), ("Replacement", "new")):
+              out += [f"## {label}", ""]
+              for f in sorted(glob.glob(os.path.join(os.environ["RUNNER_TEMP"], f"results-{key}", "*.xml"))):
+                  text = html.unescape(open(f, encoding="utf-8", errors="replace").read())
+                  out += ["- " + l for l in re.findall(r"(?:^|\[)((?:Benchmark|Swipe accuracy|Swipe timing|Swipe words)[^:\n]*: .*)$", text, re.M)]
+                  for m in re.finditer(r'<testcase name="([^"]+)" classname="([^"]+)"[^>]*>\s*<failure message="([^"]{0,300})', text):
+                      out.append(f"- FAILED {m.group(2).rsplit('.', 1)[-1]}.{m.group(1)}: {m.group(3)}")
+              out.append("")
+          open("tools/dictgen/experiment/benchmarks.md", "w", encoding="utf-8").write("\n".join(out))
+          print("\n".join(out))
           PY
-
-      - name: Upload dictionaries
-        uses: actions/upload-artifact@v4
-        with:
-          name: dictionaries
-          path: app/src/main/assets/dictionaries/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tools/dictgen/experiment/words.md tools/dictgen/experiment/benchmarks.md
+          git commit -m "Experiment results" && git push origin HEAD:${GITHUB_REF_NAME}

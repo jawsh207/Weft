@@ -804,6 +804,7 @@ def main() -> None:
     p.add_argument("--variants")
     p.add_argument("--variant-out", action="append", metavar="REGION=PATH")
     p.add_argument("--out", required=True, help="Output .ekd path")
+    p.add_argument("--words-out", help="Also write the kept words as 'word<TAB>frequency<TAB>flags'")
     p.add_argument("--max-words", type=int, default=150_000)
     p.add_argument("--min-count", type=int, default=3, help="Ignore subtitle words seen fewer times")
     p.add_argument("--casual-weight", type=float, default=0.4,
@@ -829,6 +830,11 @@ def main() -> None:
         e.word: (final_frequency(e, args.casual_weight), FLAG_OFFENSIVE if e.offensive else 0)
         for e in kept
     }
+
+    if args.words_out:
+        with open(args.words_out, "w", encoding="utf-8") as f:
+            for e in kept:
+                f.write(f"{e.word}\t{words[e.word][0]}\t{words[e.word][1]}\n")
 
     # Next-word data from sentences (Leipzig news, Tatoeba conversation).
     context = SentenceCounts(words)

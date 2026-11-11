@@ -33,10 +33,7 @@ class SwipeAccuracyTest {
         val centers = KeyGeometry.centers(Layouts.qwerty)
         val decoder = SwipeDecoder(dict, centers, LearnedWords(null))
         val rnd = Random(7)
-        val words = (1 until dict.nodeCount)
-            .filter { dict.freq(it) >= 150 && !dict.isOffensive(it) }
-            .map { dict.word(it) }
-            .filter { it.length in 2..11 && it.all { c -> c in 'a'..'z' } }
+        val words = sampleWords(dict, 150)
             .shuffled(rnd)
             .take(SAMPLE)
 
@@ -68,10 +65,7 @@ class SwipeAccuracyTest {
         val centers = KeyGeometry.centers(Layouts.qwerty)
         val learned = LearnedWords(null)
         val decoder = SwipeDecoder(dict, centers, learned)
-        val all = (1 until dict.nodeCount)
-            .filter { dict.freq(it) >= 150 && !dict.isOffensive(it) }
-            .map { dict.word(it) }
-            .filter { it.length in 2..11 && it.all { c -> c in 'a'..'z' } }
+        val all = sampleWords(dict, 150)
             .shuffled(Random(21))
         val training = all.take(150)
         val testWords = all.drop(150).take(SAMPLE)
@@ -120,10 +114,7 @@ class SwipeAccuracyTest {
         val dict = BinaryDictionary.map(file!!)
         val centers = KeyGeometry.centers(Layouts.qwerty)
         val decoder = SwipeDecoder(dict, centers, LearnedWords(null))
-        val words = (1 until dict.nodeCount)
-            .filter { dict.freq(it) >= 135 && !dict.isOffensive(it) }
-            .map { dict.word(it) }
-            .filter { it.length in 2..11 && it.all { c -> c in 'a'..'z' } }
+        val words = sampleWords(dict, 135)
             .shuffled(Random(7))
             .take(1200)
         val paces = listOf(
@@ -178,6 +169,24 @@ class SwipeAccuracyTest {
             val got = decoder.decode(xs.toFloatArray(), ys.toFloatArray(), null, times = times.toLongArray())
             assertEquals("pausing on '${word[1]}'", word, got.firstOrNull()?.word)
         }
+    }
+
+    /**
+     * Common lowercase words to swipe. For comparing two dictionaries on the same
+     * words, WEFT_SWIPE_WORDS_<minFreq> can name a file with one word per line.
+     */
+    private fun sampleWords(dict: BinaryDictionary, minFreq: Int): List<String> {
+        val fixed = System.getenv("WEFT_SWIPE_WORDS_$minFreq")?.let(::File)?.takeIf { it.exists() }
+        if (fixed != null) {
+            val known = (1 until dict.nodeCount).filter { dict.freq(it) > 0 }.map { dict.word(it) }.toSet()
+            val listed = fixed.readLines().map { it.trim() }.filter { it.isNotEmpty() }
+            println("Swipe words: ${listed.size} listed, ${listed.count { it !in known }} not in this dictionary")
+            return listed.filter { it in known }
+        }
+        return (1 until dict.nodeCount)
+            .filter { dict.freq(it) >= minFreq && !dict.isOffensive(it) }
+            .map { dict.word(it) }
+            .filter { it.length in 2..11 && it.all { c -> c in 'a'..'z' } }
     }
 
     private fun score(decoder: SwipeDecoder, words: List<String>, make: (String) -> SwipeSimulator.Swipe?): Pair<Double, Double> {
