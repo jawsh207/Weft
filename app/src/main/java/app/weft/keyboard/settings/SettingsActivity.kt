@@ -129,6 +129,10 @@ class SettingsActivity : ComponentActivity() {
     }
 }
 
+/**
+ * The main settings page: the steps to turn Weft on (enable it, select it, allow the microphone),
+ * a box to try the keyboard in, and the list of settings sections.
+ */
 @Composable
 private fun SetupScreen(requestMicOnLaunch: Boolean, onOpen: (SettingsPage) -> Unit) {
     val context = LocalContext.current
@@ -242,6 +246,7 @@ private fun SetupScreen(requestMicOnLaunch: Boolean, onOpen: (SettingsPage) -> U
     }
 }
 
+/** One numbered setup step with its button, ticked off once done. */
 @Composable
 private fun StepCard(
     number: Int,
@@ -297,6 +302,7 @@ private fun StepCard(
     }
 }
 
+/** A rounded card grouping related settings, with an optional heading. */
 @Composable
 internal fun SectionCard(title: String?, content: @Composable () -> Unit) {
     Card(
@@ -589,6 +595,7 @@ private fun <T> ChoiceRow(
     }
 }
 
+/** A setting with a title, an explanation and an on/off switch; the whole row is tappable. */
 @Composable
 private fun SwitchRow(
     title: String,
@@ -677,6 +684,10 @@ private fun DictionaryInfo() {
 }
 
 
+/**
+ * Whether Weft may use the microphone (needed for voice input, even though the system's engine
+ * does the listening).
+ */
 private fun Context.hasMic(): Boolean =
     checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 

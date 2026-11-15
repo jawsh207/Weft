@@ -133,16 +133,21 @@ score autocorrect, predictions and swipe; see
 
 ## Project layout
 
+A plain-language tour of what each part does is in
+[docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md), and every source file opens
+with its own description. [CONTRIBUTING.md](CONTRIBUTING.md) has the rules
+that keep it that way.
+
 ```
 app/src/main/java/app/weft/keyboard/
-├── ime/        WeftKeyboardService (the IME), TypingController, KeyboardState
+├── ime/        WeftKeyboardService (the IME), TypingController, KeyboardState, KeyboardLog
 ├── predict/    Dictionary, fuzzy search, ranking, learned words, swipe decoder (no Android deps)
 ├── layout/     Key model, page layouts and key geometry
 ├── ui/         Compose keyboard, key button with Expressive motion
 ├── theme/      SystemTheme: dynamic color + MaterialExpressiveTheme
 ├── voice/      SystemVoiceInput: wraps android.speech.SpeechRecognizer
 ├── emoji/      Emoji list parser, search, recents and skin tones
-└── settings/   SettingsActivity: onboarding and test field
+└── settings/   SettingsActivity: onboarding, settings pages, learned words
 ```
 
 ## Roadmap

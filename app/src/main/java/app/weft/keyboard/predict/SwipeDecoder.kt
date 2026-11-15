@@ -55,6 +55,10 @@ class SwipeDecoder(
         val minDip: Float = MIN_DIP,
     )
 
+    /**
+     * A word the swipe could be: [score] ranks it (higher is better), [geometry] is how far its
+     * ideal path is from the swipe.
+     */
     data class Candidate(val word: String, val score: Float, val geometry: Float)
 
     /** Rough path length (key widths) below which a gesture is treated as a tap. */
@@ -166,6 +170,7 @@ class SwipeDecoder(
         private val word = StringBuilder()
         private var visited = 0
 
+        /** Reports every dictionary word whose letters the path passes near, in order. */
         fun run(onWord: (node: Int, word: String) -> Unit) {
             walk(0, 0, -1, -1, onWord)
         }
@@ -280,6 +285,10 @@ class SwipeDecoder(
         companion object {
             const val EDGE = 0.3f
 
+            /**
+             * Finds the slowdowns in a swipe from its points and their times; null if the times
+             * are unusable or the swipe was too quick to read.
+             */
             fun of(xs: FloatArray, ys: FloatArray, times: LongArray, minDip: Float): Dips? {
                 val m = xs.size
                 val cum = FloatArray(m)
@@ -372,6 +381,7 @@ class SwipeDecoder(
         return cost
     }
 
+    /** 1 when a slowdown is right at a letter, falling toward 0 as it gets farther away along the path. */
     private fun closeness(distance: Float): Float {
         val z = distance / tuning.dipReach
         return kotlin.math.exp(-z * z / 2)
@@ -425,12 +435,14 @@ class SwipeDecoder(
         return out
     }
 
+    /** Keeps the higher-scoring candidate for each word. */
     private fun keepBest(map: HashMap<String, Candidate>, c: Candidate) {
         val old = map[c.word]
         if (old == null || c.score > old.score) map[c.word] = c
     }
 
     companion object {
+        /** A touch that travels less than this (key widths) is a tap, not a swipe. */
         const val MIN_PATH = 0.6f
         // Radii and the name handicap were tuned on human-like synthetic swipes
         // (SwipeSimulator: curved, corner-cutting, shifted, overshooting). Wider radii
@@ -462,16 +474,22 @@ class SwipeDecoder(
 
         /** Start/end farther than this from the letters isn't used to learn the user's offset. */
         const val MAX_LEARN_OFFSET = 1.2f
+        /**
+         * Points the swipe is resampled to: finely for matching letters, coarsely for comparing
+         * shapes. MAX_VISITS caps the dictionary search.
+         */
         const val DENSE_POINTS = 120
         const val SHAPE_POINTS = 48
         const val MAX_VISITS = 200_000
 
+        /** Straight-line distance between two points. */
         private fun dist(x1: Float, y1: Float, x2: Float, y2: Float): Float {
             val dx = x1 - x2
             val dy = y1 - y2
             return sqrt(dx * dx + dy * dy)
         }
 
+        /** Straight-line distance between two points. */
         private fun distTo(p: FloatArray, q: FloatArray) = dist(p[0], p[1], q[0], q[1])
 
         /** [n] points evenly spaced along the polyline (a single point repeats). */
@@ -495,6 +513,7 @@ class SwipeDecoder(
             return out
         }
 
+        /** Average distance between matching points of two paths with the same number of points. */
         private fun meanDistance(a: Array<FloatArray>, b: Array<FloatArray>): Float {
             var sum = 0f
             for (i in a.indices) sum += distTo(a[i], b[i])

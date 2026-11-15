@@ -1,14 +1,20 @@
 package app.weft.keyboard.layout
 
 /**
- * Key model shared by tap typing now and gesture typing later: every key has a
- * width weight, and the rows of a page add up to the same total so key geometry
- * is predictable for swipe-path matching.
+ * What is on the keyboard: the kinds of key, the pages (letters, symbols, more
+ * symbols, number pad) and which keys sit in which row, plus the long-press
+ * alternates. Nothing here draws anything; the ui package turns these rows
+ * into keys on screen.
+ *
+ * Every key has a width weight (1 = an ordinary letter key), and the rows of a
+ * page add up to the same total (10). That keeps key positions predictable,
+ * which typo correction and swipe typing both rely on (see [KeyGeometry]).
  */
 sealed interface Key {
     val weight: Float
 }
 
+/** A key that types text: [label] is what it shows, [output] what it types. */
 data class CharKey(
     val label: String,
     val output: String = label,
@@ -17,6 +23,7 @@ data class CharKey(
     val secondary: Boolean = false,
 ) : Key
 
+/** A key that does something instead of typing: shift, backspace, enter, switching page… */
 data class ActionKey(
     val action: KeyAction,
     override val weight: Float = 1f,
@@ -25,6 +32,7 @@ data class ActionKey(
 /** Empty space, e.g. the half-key indent on the middle letter row. */
 data class Gap(override val weight: Float) : Key
 
+/** What an [ActionKey] does. The "To…" actions switch to another page of the keyboard. */
 enum class KeyAction {
     Shift,
     Backspace,
@@ -37,13 +45,18 @@ enum class KeyAction {
     Emoji,
 }
 
+/** The pages of the keyboard. Emoji has no key rows: the emoji picker takes their place. */
 enum class KeyboardPage { Letters, Symbols, MoreSymbols, Numpad, Emoji }
 
+/** One row of keys, left to right. */
 typealias KeyRow = List<Key>
 
+/** The English QWERTY layout and its symbol and number pages. */
 object Layouts {
+    /** One ordinary key per character of [s]. */
     private fun chars(s: String): List<Key> = s.map { CharKey(it.toString()) }
 
+    /** Bottom row of the letters page: symbols, comma, emoji, space, period, enter. */
     private fun letterBottomRow(): KeyRow = listOf(
         ActionKey(KeyAction.ToSymbols, 1.5f),
         CharKey(","),
@@ -64,6 +77,7 @@ object Layouts {
         ActionKey(KeyAction.Enter, 1.5f),
     )
 
+    /** The letters page. The middle row is indented half a key each side, as on a physical keyboard. */
     val qwerty: List<KeyRow> = listOf(
         chars("qwertyuiop"),
         listOf(Gap(0.5f)) + chars("asdfghjkl") + Gap(0.5f),
@@ -75,6 +89,7 @@ object Layouts {
     /** Optional digits above the letters (Settings › Number row). */
     val numberRow: KeyRow = chars("1234567890")
 
+    /** First symbols page: digits and common punctuation. */
     val symbols: List<KeyRow> = listOf(
         chars("1234567890"),
         chars("@#\$_%&-+()"),
@@ -83,6 +98,7 @@ object Layouts {
         symbolBottomRow(),
     )
 
+    /** Second symbols page: maths, currency and brackets. */
     val moreSymbols: List<KeyRow> = listOf(
         chars("~`|•√π÷×¶∆"),
         chars("£¢€¥^°={}\\"),
@@ -119,6 +135,7 @@ object Layouts {
         ActionKey(KeyAction.Enter, 1.5f),
     )
 
+    /** The key rows for [page] (none for the emoji page). */
     fun rowsFor(page: KeyboardPage): List<KeyRow> = when (page) {
         KeyboardPage.Letters -> qwerty
         KeyboardPage.Symbols -> symbols
@@ -176,5 +193,6 @@ object Layouts {
         "0" to listOf("⁰", "₀", "↉", "°", "∅"),
     )
 
+    /** The long-press choices for a key that types [output], or none. */
     fun alternatesFor(output: String): List<String> = alternates[output.lowercase()].orEmpty()
 }

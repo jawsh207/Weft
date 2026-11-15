@@ -91,10 +91,24 @@ import app.weft.keyboard.layout.Layouts
 import kotlin.math.abs
 import kotlin.math.sign
 
+/**
+ * The keyboard as drawn on screen: the strip along the top (suggestions, the
+ * tools and mic keys, voice status), the rows of keys for the current page, and
+ * how a key looks and reacts to touch (tap, hold to repeat, hold for
+ * alternates, slide on the space bar to move the cursor).
+ *
+ * This file only draws and reports touches. What a touch does is decided by
+ * the keyboard service, which passes in the state to draw ([KeyboardState])
+ * and the functions to call. Swipe typing sits on top of the letter rows (see
+ * SwipeArea); the emoji page is in EmojiPicker.
+ */
+
+/** Half the space between neighbouring keys. */
 internal val KeyGap = 3.dp
 
 /** Space between the bottom row and the system navigation bar / IME switcher. */
 private val BottomClearance = 18.dp
+/** Rows of keys on every page (the optional number row is extra). */
 private const val KEY_ROWS = 4
 
 /** The optional number row is a little shorter than the letter rows. */
@@ -120,6 +134,10 @@ internal class KeyHandlers(
     val onSwipe: (xs: FloatArray, ys: FloatArray, times: LongArray, done: Boolean) -> Unit,
 )
 
+/**
+ * The whole keyboard. [state] is what to show; the other parameters are what to call when the user
+ * does something.
+ */
 @Composable
 fun KeyboardScreen(
     state: KeyboardState,
@@ -146,6 +164,7 @@ fun KeyboardScreen(
     }
 }
 
+/** Lays out the top strip and, below it, the emoji picker or the key rows for the current page. */
 @Composable
 private fun KeyboardLayout(
     state: KeyboardState,
@@ -327,6 +346,7 @@ private fun ToolsRow(hasClip: Boolean, tools: ToolActions) {
     }
 }
 
+/** One button in the tools row (paste, clear clipboard, settings). */
 @Composable
 private fun RowScope.ToolButton(
     @DrawableRes icon: Int,
@@ -405,6 +425,7 @@ private fun SuggestionRow(
     }
 }
 
+/** One of the three suggestions: tap to use it, long-press to offer removing it. */
 @Composable
 private fun SuggestionSlot(
     chip: SuggestionChip,
@@ -441,6 +462,7 @@ private fun SuggestionSlot(
     }
 }
 
+/** One row of keys, each as wide as its weight. */
 @Composable
 internal fun KeyRowView(row: KeyRow, state: KeyboardState, handlers: KeyHandlers, height: Dp = RowHeight) {
     Row(
@@ -452,6 +474,7 @@ internal fun KeyRowView(row: KeyRow, state: KeyboardState, handlers: KeyHandlers
     }
 }
 
+/** One key in a row: a letter or symbol key, an action key, or empty space for a gap. */
 @Composable
 internal fun RowScope.KeySlot(key: Key, state: KeyboardState, handlers: KeyHandlers) {
     val slot = Modifier
@@ -479,6 +502,10 @@ internal fun RowScope.KeySlot(key: Key, state: KeyboardState, handlers: KeyHandl
     }
 }
 
+/**
+ * Shift, backspace, enter, space and the page-switching keys: their icon or label, color and touch
+ * behavior.
+ */
 @Composable
 private fun ActionKeyView(
     key: ActionKey,
@@ -548,6 +575,7 @@ private fun ActionKeyView(
     }
 }
 
+/** The enter key's icon for what the field will do with it: search, send, next, done or a new line. */
 @DrawableRes
 private fun enterIcon(action: Int): Int = when (action) {
     EditorInfo.IME_ACTION_SEARCH -> R.drawable.ic_search
@@ -558,11 +586,13 @@ private fun enterIcon(action: Int): Int = when (action) {
     else -> R.drawable.ic_enter
 }
 
+/** An icon on a key. */
 @Composable
 private fun KeyIcon(@DrawableRes id: Int, tint: Color) {
     Icon(painterResource(id), contentDescription = null, tint = tint)
 }
 
+/** A text label on a function key ("?123", "ABC"). */
 @Composable
 private fun KeyText(text: String, tint: Color) {
     Text(text, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = tint)
@@ -570,10 +600,16 @@ private fun KeyText(text: String, tint: Color) {
 
 // --- Key button with Expressive press motion --------------------------------------
 
+/**
+ * How a key is colored: letters, function keys (shift, backspace…), a function key that is
+ * switched on (shift), the enter key, and borderless keys in the emoji picker.
+ */
 internal enum class KeyStyle { Letter, Function, Active, Primary, Ghost }
 
+/** A key's background, its label color, and its background while pressed. */
 private data class KeyColors(val container: Color, val content: Color, val pressed: Color)
 
+/** The colors for [style], from the phone's Material You palette. */
 @Composable
 private fun keyColors(style: KeyStyle): KeyColors {
     val cs = MaterialTheme.colorScheme
@@ -746,13 +782,16 @@ internal fun KeyButton(
     }
 }
 
+/** How a press ended: the finger lifted on the key ([normally]) or the touch was cancelled. */
 private class Released(val normally: Boolean)
 
+/** Corner radius of a key at rest; it rounds further while pressed. */
 private fun restCorner(style: KeyStyle): Dp = when (style) {
     KeyStyle.Letter, KeyStyle.Ghost -> 12.dp
     KeyStyle.Function, KeyStyle.Active -> 16.dp
     KeyStyle.Primary -> 20.dp
 }
 
+/** Holding backspace: the wait before it starts repeating, then the time between repeats. */
 private const val REPEAT_DELAY_MS = 400L
 private const val REPEAT_INTERVAL_MS = 50L

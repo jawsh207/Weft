@@ -113,17 +113,22 @@ class WeftKeyboardService :
 
     // --- Keyboard state ------------------------------------------------------------
 
+    /** What the keys on screen show; changing it redraws them. */
     private val state = KeyboardState()
     private val emojiHistory = EmojiHistory()
     private lateinit var voice: SystemVoiceInput
     private lateinit var learned: LearnedWords
     private lateinit var typing: TypingController
+    /** When shift was last tapped, to spot a double tap (caps lock). */
     private var lastShiftTap = 0L
+    /** A space to put before dictated text when the cursor follows a word, otherwise empty. */
     private var voicePrefix = ""
 
     /** The text before the cursor when voice input started, for capitals (see VoiceText). */
     private var voiceBefore: CharSequence? = null
+    /** The suggestion ranking in progress, cancelled when the text changes again. */
     private var suggestJob: Job? = null
+    /** The swipe preview being decoded, cancelled by the next one. */
     private var swipeJob: Job? = null
 
     /** The keys' view, kept to report its size in [KeyboardLog] when the window shows. */
@@ -142,6 +147,7 @@ class WeftKeyboardService :
 
     @Volatile
     private var swipeDecoder: SwipeDecoder? = null
+    /** Whether this field and the settings allow swipe typing (it also needs the dictionary loaded). */
     private var swipeAllowed = false
     private lateinit var clipboard: ClipboardManager
     private val clipListener = ClipboardManager.OnPrimaryClipChangedListener { updateClipboardState() }
@@ -186,6 +192,10 @@ class WeftKeyboardService :
         return answer
     }
 
+    /**
+     * The system started the keyboard: set up voice, learned words, the clipboard watcher, and
+     * load the dictionary and emoji in the background.
+     */
     override fun onCreate() {
         super.onCreate()
         KeyboardLog.attach(noBackupFilesDir)
@@ -229,18 +239,21 @@ class WeftKeyboardService :
         return state.emojiTones[e.base] ?: e.base
     }
 
+    /** An emoji was tapped in the picker: type it and move it to the front of the recents. */
     private fun onEmoji(text: String) {
         state.message = null
         commitKeyText(text)
         rememberEmoji(text)
     }
 
+    /** A skin tone was chosen from an emoji's long-press popup: remember it for that emoji and type it. */
     private fun onEmojiVariant(base: String, chosen: String) {
         emojiHistory.setPreferred(base, chosen)
         state.emojiTones = emojiHistory.preferredTones
         onEmoji(chosen)
     }
 
+    /** Saves the recents and chosen skin tones so they survive a restart. */
     private fun rememberEmoji(text: String) {
         emojiHistory.use(text)
         state.emojiRecents = emojiHistory.recents
@@ -270,6 +283,10 @@ class WeftKeyboardService :
         }
     }
 
+    /**
+     * Loads what the user has taught the keyboard and the phone's personal dictionary, then the
+     * main dictionary.
+     */
     private fun loadPrediction() {
         lifecycleScope.launch {
             withContext(Dispatchers.IO) {
@@ -284,6 +301,10 @@ class WeftKeyboardService :
     private var dictionaryLocale: String? = null
     private var dictionaryJob: Job? = null
 
+    /**
+     * Opens the dictionary for [locale] off the main thread and builds the suggester and swipe
+     * decoder from it.
+     */
     private fun loadDictionary(locale: String) {
         if (locale == dictionaryLocale) return
         dictionaryLocale = locale
@@ -301,12 +322,14 @@ class WeftKeyboardService :
         }
     }
 
+    /** The user switched keyboard language (US, UK, Canada, Australia): load that dictionary. */
     override fun onCurrentInputMethodSubtypeChanged(newSubtype: android.view.inputmethod.InputMethodSubtype?) {
         super.onCurrentInputMethodSubtypeChanged(newSubtype)
         val tag = newSubtype?.languageTag?.takeIf { it.isNotEmpty() } ?: return
         if (dictionaryLocale != null) loadDictionary(tag.replace('-', '_'))
     }
 
+    /** The selected keyboard language as a dictionary name ("en_GB"); US English if none is set. */
     private fun currentLocale(): String {
         val tag = getSystemService(InputMethodManager::class.java)
             ?.currentInputMethodSubtype?.languageTag
@@ -362,6 +385,10 @@ class WeftKeyboardService :
         lifecycleScope.launch(Dispatchers.IO) { KeyboardLog.save() }
     }
 
+    /**
+     * Builds the keys. Android calls this the first time the keyboard is shown and again after
+     * rotation or a theme change.
+     */
     override fun onCreateInputView(): View {
         KeyboardLog.note("building the keys")
         window.window?.decorView?.let { root ->
@@ -400,6 +427,10 @@ class WeftKeyboardService :
         }
     }
 
+    /**
+     * The keyboard is about to appear for a field: pick the page and enter key for it, apply
+     * settings, and reset anything left over from the last field.
+     */
     override fun onStartInputView(info: EditorInfo, restarting: Boolean) {
         val began = SystemClock.uptimeMillis()
         super.onStartInputView(info, restarting)
@@ -464,6 +495,7 @@ class WeftKeyboardService :
         state.swipeEnabled = swipeAllowed && swipeDecoder != null
     }
 
+    /** Copies the look-and-feel settings (vibration, key height, number row, swipe visuals) to the keys. */
     private fun applyLookAndFeel(prefs: android.content.SharedPreferences) {
         state.haptics = prefs.haptics()
         state.keyHeight = prefs.keyHeight()
@@ -471,6 +503,10 @@ class WeftKeyboardService :
         state.swipeVisuals = prefs.swipeVisuals()
     }
 
+    /**
+     * The keyboard is being put away: stop listening, finish any half-entered voice text and save
+     * what was learned.
+     */
     override fun onFinishInputView(finishingInput: Boolean) {
         KeyboardLog.note("keyboard put away")
         mainHandler.removeCallbacks(readField)
@@ -482,6 +518,7 @@ class WeftKeyboardService :
         super.onFinishInputView(finishingInput)
     }
 
+    /** Rotation, dark mode, wallpaper colors, font size and the like changed. */
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         KeyboardLog.note(
@@ -492,6 +529,10 @@ class WeftKeyboardService :
         state.themeEpoch++ // dark mode, palette, contrast or font changes
     }
 
+    /**
+     * The cursor moved or the text changed, by typing or by the user tapping in the field: refresh
+     * auto-capitals and suggestions.
+     */
     override fun onUpdateSelection(
         oldSelStart: Int, oldSelEnd: Int,
         newSelStart: Int, newSelEnd: Int,
@@ -506,6 +547,7 @@ class WeftKeyboardService :
         }
     }
 
+    /** The system is shutting the keyboard down: save and release everything. */
     override fun onDestroy() {
         KeyboardLog.note("keyboard service stopped")
         mainHandler.removeCallbacks(readField)
@@ -598,6 +640,7 @@ class WeftKeyboardService :
         ShiftState.Locked -> word.uppercase()
     }
 
+    /** A suggestion in the strip was tapped. */
     private fun onSuggestion(chip: SuggestionChip) {
         state.message = null
         state.pendingRemoval = null
@@ -608,6 +651,10 @@ class WeftKeyboardService :
 
     // --- Key handling --------------------------------------------------------------
 
+    /**
+     * A key was tapped. Letters and symbols are typed (capitalized if shift is on); action keys go
+     * to [onAction].
+     */
     private fun onKey(key: Key) {
         state.message = null
         state.toolsOpen = false
@@ -627,6 +674,7 @@ class WeftKeyboardService :
         }
     }
 
+    /** Shift, backspace, enter, space and the keys that switch page. */
     private fun onAction(action: KeyAction) {
         when (action) {
             KeyAction.Shift -> toggleShift()
@@ -701,6 +749,10 @@ class WeftKeyboardService :
         ic.deleteSurroundingText(length, 0)
     }
 
+    /**
+     * Enter: finish the current word, then do what the field asked for (search, send, next…) or
+     * type a new line.
+     */
     private fun onEnter() {
         val ic = currentInputConnection ?: return
         typing.onSeparator(editor, "") // autocorrect the last word first
@@ -711,6 +763,7 @@ class WeftKeyboardService :
         }
     }
 
+    /** What the enter key should do in this field, or IME_ACTION_NONE for a plain new line. */
     private fun resolveEnterAction(info: EditorInfo): Int {
         if (info.imeOptions and EditorInfo.IME_FLAG_NO_ENTER_ACTION != 0) {
             return EditorInfo.IME_ACTION_NONE
@@ -726,6 +779,10 @@ class WeftKeyboardService :
         }
     }
 
+    /**
+     * Turns shift on at the start of a sentence, where the field wants capitals (asks the app, so
+     * not while the keyboard is opening).
+     */
     private fun updateAutoCaps() {
         if (state.shift == ShiftState.Locked || state.page != KeyboardPage.Letters) return
         val ic = currentInputConnection ?: return
@@ -736,6 +793,7 @@ class WeftKeyboardService :
 
     // --- Tools row --------------------------------------------------------------------
 
+    /** Whether there is anything to paste, for the tools row. */
     private fun updateClipboardState() {
         state.clipboardHasContent = runCatching { clipboard.hasPrimaryClip() }.getOrDefault(false)
     }
@@ -753,6 +811,7 @@ class WeftKeyboardService :
         if (!text.isNullOrEmpty()) ic.commitText(text, 1)
     }
 
+    /** Tools row › Clear clipboard. */
     private fun clearClipboard() {
         state.toolsOpen = false
         runCatching { clipboard.clearPrimaryClip() }
@@ -760,6 +819,7 @@ class WeftKeyboardService :
         state.message = getString(R.string.clipboard_cleared)
     }
 
+    /** Tools row › Settings: hide the keyboard and open Weft's settings. */
     private fun openSettings() {
         state.toolsOpen = false
         requestHideSelf(0)
@@ -770,6 +830,10 @@ class WeftKeyboardService :
 
     // --- Voice -------------------------------------------------------------------------
 
+    /**
+     * The mic key: stop if already listening, ask for the microphone permission if it's missing,
+     * otherwise start the system's speech engine.
+     */
     private fun onMic() {
         state.message = null
         when {
@@ -798,6 +862,10 @@ class WeftKeyboardService :
             variation == InputType.TYPE_TEXT_VARIATION_FILTER
     }
 
+    /**
+     * What the speech engine reports back: partial words appear as you speak, the final text
+     * replaces them.
+     */
     private val voiceListener = object : SystemVoiceInput.Listener {
         override fun onListeningChanged(listening: Boolean) {
             state.listening = listening

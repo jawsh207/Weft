@@ -3,6 +3,7 @@ package app.weft.keyboard.predict
 import java.util.PriorityQueue
 import kotlin.math.min
 
+/** How a suggested word relates to what was typed. */
 enum class SuggestionKind {
     /** Matches what was typed, ignoring case/accents ("monday" → "Monday"). */
     Exact,
@@ -17,6 +18,7 @@ enum class SuggestionKind {
     Prediction,
 }
 
+/** One suggested word with its rank ([score], higher is better). */
 data class Suggestion(
     val word: String,
     val kind: SuggestionKind,
@@ -25,6 +27,7 @@ data class Suggestion(
     val cost: Float,
 )
 
+/** Everything [Suggester.suggest] worked out for one typed word. */
 data class SuggestionResult(
     val typed: String,
     /** Best first; never contains the typed text itself. */
@@ -35,15 +38,29 @@ data class SuggestionResult(
     val autocorrect: Suggestion?,
 ) {
     companion object {
+        /** Nothing typed and nothing to offer. */
         val EMPTY = SuggestionResult("", emptyList(), true, null)
     }
 }
 
 /**
- * Proximity-aware fuzzy lookup over the trie: a Damerau-Levenshtein row is
- * carried down each branch and branches are pruned as soon as every cell
- * exceeds the edit budget. Ranking blends word frequency, edit cost and
- * next-word (bigram) context.
+ * Turns what was typed into words to offer: the three suggestions in the
+ * strip, the autocorrect that space applies, and next-word predictions when
+ * nothing has been typed yet.
+ *
+ * For a typed word it finds dictionary words that are close: a neighbouring
+ * key hit by mistake costs little, a missing, extra or swapped letter more.
+ * Each candidate is then ranked by how common the word is, how far it is from
+ * what was typed, how well it follows the previous one or two words, and the
+ * user's own habits ([LearnedWords]). It also tries splitting ("alot" → "a
+ * lot"), contractions ("dont" → "don't") and completions ("keyb" → "keyboard").
+ * Autocorrect is deliberately cautious: real words, names, acronyms and
+ * anything the user has kept as typed are left alone.
+ *
+ * How the search works: it walks the dictionary's letter tree carrying one row
+ * of an edit-distance table (Damerau-Levenshtein, with key distance as the
+ * substitution cost) down each branch, and abandons a branch as soon as every
+ * cell is over the budget for that word length.
  */
 class Suggester(
     private val dictionary: BinaryDictionary?,
@@ -169,6 +186,7 @@ class Suggester(
         return candidate.takeIf { dict.freq(candidateNode) - dict.freq(typedNode) >= CONTRACTION_MARGIN }
     }
 
+    /** All capitals ("NASA", "OK"): never autocorrected. */
     private fun isAcronym(typed: String) = typed.length >= 2 && typed.none { it.isLowerCase() }
 
     /**
@@ -199,6 +217,7 @@ class Suggester(
         return isNameOnly(word) && dict.freq(dict.findIgnoreCase(word)) < WELL_KNOWN_NAME
     }
 
+    /** A capital first letter and no others ("Paris", not "NASA" or "iPhone"). */
     private fun isCapitalized(word: String) =
         word.length >= 2 && word[0].isUpperCase() && word.drop(1).none { it.isUpperCase() }
 
@@ -236,6 +255,7 @@ class Suggester(
         limit: Int,
     ): List<Suggestion> {
         val found = HashMap<String, Suggestion>()
+        /** Keeps the best score seen for each word, skipping words the user removed. */
         fun offer(word: String, score: Float) {
             if (learned.isRemoved(word)) return
             val key = word.lowercase()
@@ -271,6 +291,10 @@ class Suggester(
 
     // --- Scoring -----------------------------------------------------------------------------
 
+    /**
+     * A candidate's rank: how common it is, minus how far it is from what was typed, plus how well
+     * it follows the previous words and the user's own habits.
+     */
     private fun score(
         word: String,
         freq: Int,
@@ -383,16 +407,23 @@ class Suggester(
 
     // --- Trie search -------------------------------------------------------------------------
 
+    /**
+     * One fuzzy search of the dictionary for the typed letters [t], allowing up to [budget] of
+     * typing error. Collects whole words ([terminals]) and prefixes worth completing
+     * ([prefixHits]), each with its cost.
+     */
     private inner class Search(val dict: BinaryDictionary, val t: IntArray, val budget: Float) {
         val n = t.size
         val terminals = HashMap<Int, Float>()
         val prefixHits = HashMap<Int, Float>()
 
+        /** Starts the search at the root of the letter tree. */
         fun run() {
             val row0 = FloatArray(n + 1) { it * EXTRA_LETTER }
             visit(0, row0, null, -1)
         }
 
+        /** Extends the search by each letter that can follow [node], carrying the edit-distance rows down. */
         private fun visit(node: Int, prev: FloatArray, prevPrev: FloatArray?, prevCh: Int) {
             val first = dict.firstChild(node)
             val count = dict.childCount(node)
@@ -485,11 +516,16 @@ class Suggester(
         return prev[n] to bestPrefix
     }
 
+    /** Remembers the lowest cost seen for [key]. */
     private fun keepMin(map: HashMap<Int, Float>, key: Int, value: Float) {
         val old = map[key]
         if (old == null || value < old) map[key] = value
     }
 
+    /**
+     * How much typing error is tolerated: short words must be nearly exact, long ones may have a
+     * couple of slips.
+     */
     private fun budgetFor(length: Int): Float = when {
         length <= 1 -> 0.5f
         length <= 3 -> 1.0f
@@ -500,9 +536,11 @@ class Suggester(
     companion object {
         /** Costs at or below this count as the same word (case/accent differences). */
         const val EXACT_COST = 0.3f
+        /** What each kind of slip costs (a neighbouring key costs less than these; see [KeyProximity]). */
         const val EXTRA_LETTER = 1f
         const val DOUBLED_LETTER = 0.5f
         const val TRANSPOSITION = 0.6f
+        /** How the parts of a score are weighed against each other. */
         const val COST_WEIGHT = 4.5f
         const val EXACT_BONUS = 2f
         const val COMPLETION_PENALTY = 1.2f
@@ -512,6 +550,7 @@ class Suggester(
 
         /** Score of a word pair the user has typed twice, before its boosts; strong dictionary pairs reach ~8.6. */
         const val PERSONAL_PREDICTION_BASE = 7f
+        /** A correction scoring below this is offered in the strip but not applied by space. */
         const val MIN_AUTOCORRECT_SCORE = 0.75f
 
         /** Completions need more confidence than corrections before space inserts them. */
@@ -520,6 +559,7 @@ class Suggester(
         /** A case/accent/apostrophe-only match wins unless something scores this much higher. */
         const val EXACT_PRIORITY = 2f
 
+        /** The cost of a missing space ("alot" → "a lot"). */
         const val SPLIT_COST = 0.5f
 
         /** A single word this close to the best split ("although" vs "all though") is preferred. */
@@ -537,6 +577,7 @@ class Suggester(
 
         /** How much more frequent (log scale, 13 ≈ 2×) a contraction must be to replace a real word. */
         const val CONTRACTION_MARGIN = 50
+        /** Limits that keep finding completions fast. */
         const val MAX_PREFIX_HITS = 12
         const val COMPLETIONS_PER_PREFIX = 4
         const val MAX_COMPLETION_STEPS = 400

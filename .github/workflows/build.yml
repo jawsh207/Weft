@@ -108,6 +108,10 @@ jobs:
           echo "${{ secrets.WEFT_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/weft.jks"
           echo "WEFT_KEYSTORE_FILE=$RUNNER_TEMP/weft.jks" >> "$GITHUB_ENV"
 
+      # Every file, type and top-level function explains itself (CONTRIBUTING.md).
+      - name: Check source descriptions
+        run: python3 .github/scripts/check-docs.py
+
       # Wikipedia's misspellings list is share-alike, so it isn't in the repo: fetch it
       # for the benchmark. One cached copy keeps scores comparable between runs.
       - name: Cache benchmark downloads

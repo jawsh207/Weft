@@ -7,8 +7,9 @@ import android.graphics.Paint
  * so they always match the user's device. [Paint.hasGlyph] filters out
  * anything the installed font can't render, so the picker never shows tofu.
  *
- * This starter set is a placeholder. The full picker should be generated from
- * Unicode's emoji-test.txt (categories, names for search, skin-tone variants).
+ * The real list comes from assets/emoji/emoji.txt (see [EmojiCatalog]). This
+ * short starter set is only the fallback for a build that has no emoji asset,
+ * so the picker is never empty.
  */
 object SystemEmoji {
     private const val STARTER =
@@ -22,6 +23,7 @@ object SystemEmoji {
             "❤️ 🧡 💛 💚 💙 🩵 💜 🤎 🖤 🩶 🤍 🩷 💔 ❤️‍🔥 💕 💞 💓 💗 💖 💘 💝 " +
             "🔥 ✨ ⭐ 🌟 💯 🎉 🎊 👀 ✅ ❌ ⚡ 🌈 ☀️ 🌙 ☕ 🍕 🍔 🌮 🍣 🍩 🎂 🍻"
 
+    /** The starter emoji this phone's font can draw. */
     val starter: List<String> by lazy {
         val paint = Paint()
         STARTER.split(' ').filter { it.isNotBlank() && paint.hasGlyph(it) }

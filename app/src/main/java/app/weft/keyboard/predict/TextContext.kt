@@ -12,8 +12,16 @@ data class WordContext(
     val before: String? = null,
 )
 
+/**
+ * Works out the word being typed and the words before it from the raw text before the cursor, and
+ * says which characters belong to words.
+ */
 object TextContext {
 
+    /**
+     * Splits [before] (the text before the cursor) into the word being typed and the one or two
+     * words before it.
+     */
     fun parse(before: CharSequence?): WordContext {
         val text = before?.toString().orEmpty()
         var end = text.length
@@ -60,6 +68,10 @@ object TextContext {
         return text.substring(s, end).takeIf { it.isNotEmpty() }
     }
 
+    /**
+     * Letters, accents, apostrophes and hyphens are part of a word ("don't", "well-known"); digits
+     * and everything else aren't.
+     */
     fun isWordChar(cp: Int): Boolean =
         Character.isLetter(cp) ||
             Character.getType(cp).let {

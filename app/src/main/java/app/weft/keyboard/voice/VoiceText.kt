@@ -23,6 +23,10 @@ package app.weft.keyboard.voice
  */
 object VoiceText {
 
+    /**
+     * A punctuation mark that can be dictated: what it types, whether it ends a sentence, and
+     * whether it's a line break.
+     */
     private data class Mark(val text: String, val endsSentence: Boolean = false, val lineBreak: Boolean = false)
 
     /** Spoken punctuation, longest phrases first. */
@@ -120,6 +124,7 @@ object VoiceText {
     /** Whether a voice result starting with [text] attaches without a space ("comma", "new line"). */
     fun attachesToPrevious(text: String): Boolean = text.firstOrNull()?.let { it in ".,?!:;\n" } == true
 
+    /** Adds [word] with a space before it, unless it starts the text or follows a line break. */
     private fun appendWord(out: StringBuilder, word: String) {
         if (out.isNotEmpty() && !out.endsWith(" ") && !out.endsWith("\n")) out.append(' ')
         out.append(word)
@@ -129,6 +134,10 @@ object VoiceText {
     private fun enginePhraseStart(tokens: List<String>, i: Int): Boolean =
         tokens.getOrNull(i - 1)?.let { SENTENCE_END.containsMatchIn(it) && it.trimEnd('.', '?', '!', '…').lowercase() !in ABBREVIATIONS } == true
 
+    /**
+     * Whether [word] keeps its capital anywhere in a sentence: "I", acronyms, and names the
+     * dictionary only has capitalized.
+     */
     private fun keeps(word: String, keepsCapital: (String) -> Boolean): Boolean {
         val bare = word.replace(EDGE_PUNCTUATION, "")
         if (bare.isEmpty()) return true
@@ -137,6 +146,10 @@ object VoiceText {
         return keepsCapital(bare)
     }
 
+    /**
+     * The spoken punctuation phrase starting at word [i] ("question mark"), as its length in words
+     * and its mark; null if there is none.
+     */
     private fun spokenAt(words: List<String>, i: Int): Pair<Int, Mark>? {
         for ((phrase, mark) in SPOKEN) {
             if (i + phrase.size > words.size) continue
@@ -145,6 +158,7 @@ object VoiceText {
         return null
     }
 
+    /** [w] in lowercase without punctuation at its edges, for comparing. */
     private fun bareLower(w: String) = w.replace(EDGE_PUNCTUATION, "").lowercase()
 
     /** Start of the field, or after a sentence-ending mark or a line break. */

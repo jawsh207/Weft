@@ -5,6 +5,10 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+/**
+ * Checks how dictated text is tidied: the engine's own sentence punctuation is dropped, spoken
+ * punctuation ("period", "question mark") is typed, and capitals fit where the cursor is.
+ */
 class VoiceTextTest {
 
     private val names = setOf("Seattle", "Priya", "Monday", "Tom")

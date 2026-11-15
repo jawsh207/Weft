@@ -8,14 +8,18 @@ import app.weft.keyboard.predict.WordContext
 
 /** The text field, as seen by [TypingController]. Implemented over InputConnection. */
 interface TextEditor {
+    /** Up to [length] characters before the cursor, or null if the app doesn't answer. */
     fun textBeforeCursor(length: Int): CharSequence?
+    /** Deletes [length] characters before the cursor. */
     fun deleteBefore(length: Int)
+    /** Types [text] at the cursor. */
     fun insert(text: String)
 
     /** Groups edits so the app sees one change. */
     fun batch(block: () -> Unit) = block()
 }
 
+/** How a suggestion in the strip is shown and what tapping it does. */
 enum class ChipStyle {
     Normal,
 
@@ -29,6 +33,7 @@ enum class ChipStyle {
     Emoji,
 }
 
+/** One entry in the suggestion strip. */
 data class SuggestionChip(val text: String, val style: ChipStyle = ChipStyle.Normal)
 
 /**
@@ -43,7 +48,9 @@ class TypingController(private val learned: LearnedWords) {
     @Volatile
     var suggester: Suggester? = null
 
+    /** Whether the strip offers words at all (off in passwords, or in settings). */
     var suggestionsEnabled = true
+    /** Whether space may replace a mistyped word on its own. */
     var autocorrectEnabled = true
 
     /** False in fields that ask for no personalized learning (e.g. incognito). */
@@ -60,6 +67,7 @@ class TypingController(private val learned: LearnedWords) {
     @Volatile
     var emojiFor: ((String) -> String?)? = null
 
+    /** An autocorrect that just happened, kept so the next backspace can undo it. */
     private data class Correction(
         val original: String,
         val corrected: String,
@@ -67,7 +75,9 @@ class TypingController(private val learned: LearnedWords) {
         val previous: String?,
     )
 
+    /** The autocorrect a backspace would undo, if the last thing that happened was one. */
     private var lastCorrection: Correction? = null
+    /** A space was added automatically after a picked suggestion; punctuation typed next replaces it. */
     private var autoSpaced = false
 
     /**
@@ -92,6 +102,7 @@ class TypingController(private val learned: LearnedWords) {
     @Volatile
     var onSwipeKept: ((kept: String, firstGuess: String, xs: FloatArray, ys: FloatArray) -> Unit)? = null
 
+    /** The swipe still open to being swapped or deleted (see [Swiped]). */
     private var swiped: Swiped? = null
 
     /** After a swipe, the next tapped letter starts a new word with a space. */
@@ -112,6 +123,7 @@ class TypingController(private val learned: LearnedWords) {
         phantomSpace = false
     }
 
+    /** The word being typed and the two words before it, read from the text before the cursor. */
     fun context(editor: TextEditor): WordContext =
         TextContext.parse(editor.textBeforeCursor(CONTEXT_CHARS))
 
@@ -150,6 +162,7 @@ class TypingController(private val learned: LearnedWords) {
     @Volatile
     private var lastWord: String? = null
 
+    /** The strip for [result]: after a swipe its other guesses, otherwise suggestions for the typed word. */
     private fun wordChips(result: SuggestionResult): List<SuggestionChip?> {
         val words = result.suggestions.map { it.word }
         val swipe = swiped
@@ -375,6 +388,10 @@ class TypingController(private val learned: LearnedWords) {
 
     // --- Helpers ---------------------------------------------------------------------------
 
+    /**
+     * What space should replace the word being typed with, if anything: a capital "I", or the
+     * suggester's correction.
+     */
     private fun autocorrectFor(ctx: WordContext): String? {
         if (capitalizeI) capitalI(ctx.fragment)?.let { return it }
         if (!autocorrectEnabled || !suggestionsEnabled) return null
@@ -385,11 +402,16 @@ class TypingController(private val learned: LearnedWords) {
         return result.autocorrect?.word
     }
 
+    /**
+     * The user undid a correction to [word]: don't correct it again (for good, where learning is
+     * allowed).
+     */
     private fun keepAsTyped(word: String) {
         rejected += word
         if (learningEnabled) learned.keepAsTyped(word)
     }
 
+    /** Whether the user has undone a correction to [word] before. */
     private fun isKeptAsTyped(word: String) = word in rejected || learned.isKeptAsTyped(word)
 
     /** The swiped word is final once the user moves on: learn it. */
@@ -401,6 +423,10 @@ class TypingController(private val learned: LearnedWords) {
         swiped = null
     }
 
+    /**
+     * Passes a kept swipe to the decoder so it learns the user's aim and choices (not where
+     * learning is off).
+     */
     private fun learnSwipe(s: Swiped) {
         if (!learningEnabled) return
         val xs = s.xs ?: return
@@ -420,6 +446,7 @@ class TypingController(private val learned: LearnedWords) {
         }
     }
 
+    /** Takes back what [remember] recorded for [text], when the user deletes it straight away. */
     private fun forgetPhrase(text: String, previous: String?) {
         var prev = previous
         for (word in text.split(' ')) {
@@ -429,6 +456,7 @@ class TypingController(private val learned: LearnedWords) {
         }
     }
 
+    /** Counts a use of a word the dictionary doesn't know, so it's suggested after a few uses. */
     private fun learn(word: String) {
         if (!learningEnabled || word.length < 2) return
         val s = suggester ?: return
@@ -437,6 +465,7 @@ class TypingController(private val learned: LearnedWords) {
     }
 
     companion object {
+        /** How much text before the cursor is read to find the current and previous words. */
         const val CONTEXT_CHARS = 64
 
         private val LOWER_I = Regex("i(?:['’](?:m|ll|ve|d))?")
@@ -444,6 +473,7 @@ class TypingController(private val learned: LearnedWords) {
         /** "I", "I'm", "I'll", "I've", "I'd" for their lowercase forms; null for anything else. */
         fun capitalI(word: String): String? =
             if (LOWER_I.matches(word)) "I" + word.substring(1) else null
+        /** Punctuation that sticks to the word before it, replacing an automatic space. */
         private val ATTACHING_PUNCTUATION = setOf(".", ",", "!", "?", ";", ":")
 
         /** Characters a swiped word can follow without a space: "(word", "\"word". */

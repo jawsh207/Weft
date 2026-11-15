@@ -64,6 +64,7 @@ object KeyboardLog {
     @Synchronized
     fun text(): String = events.joinToString("\n")
 
+    /** Whether nothing has been recorded. */
     @Synchronized
     fun isEmpty(): Boolean = events.isEmpty()
 
@@ -84,6 +85,7 @@ object KeyboardLog {
         Thread.setDefaultUncaughtExceptionHandler(CrashRecorder(previous))
     }
 
+    /** Writes the crash into the log, saves it, then hands over to [next] (Android's own handler). */
     private class CrashRecorder(private val next: Thread.UncaughtExceptionHandler?) : Thread.UncaughtExceptionHandler {
         override fun uncaughtException(thread: Thread, error: Throwable) {
             runCatching {

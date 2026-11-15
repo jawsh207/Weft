@@ -9,6 +9,11 @@ import org.junit.Test
 import java.nio.ByteBuffer
 import kotlin.random.Random
 
+/**
+ * Checks swipe decoding on the small test dictionary: clean and sloppy paths
+ * give the right word, doubled letters and apostrophes work, the previous word
+ * breaks ties, learned words can be swiped, and taps aren't treated as swipes.
+ */
 class SwipeDecoderTest {
 
     private val centers = KeyGeometry.centers(Layouts.qwerty)

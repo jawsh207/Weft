@@ -37,6 +37,7 @@ data class FieldPolicy(
     val swipe: Boolean,
 ) {
     companion object {
+        /** Combines what the field allows with what the user switched on. */
         fun of(field: FieldTraits, prefs: TypingPrefs): FieldPolicy {
             val predictable = field.isText && !field.isPassword
             val suggestions = prefs.suggestions && predictable

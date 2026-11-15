@@ -5,6 +5,11 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+/**
+ * Checks the key layouts are well formed: every row of a page adds up to the
+ * same width, the symbol pages and number pad have the keys to get around, and
+ * long-press alternates (accents, fractions) are where they should be.
+ */
 class LayoutsTest {
 
     private fun widths(rows: List<KeyRow>) = rows.map { row -> row.sumOf { it.weight.toDouble() } }

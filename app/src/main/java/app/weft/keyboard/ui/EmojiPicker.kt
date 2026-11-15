@@ -71,6 +71,7 @@ class EmojiActions(
     val onSearch: () -> Unit,
 )
 
+/** Size of one emoji in the grid, and width of a category tab. */
 private val CellSize = 46.dp
 private val TabWidth = 44.dp
 
@@ -80,6 +81,7 @@ private class Section(val title: String, val icon: String, val items: List<Cell>
 /** [text] is what's shown and typed; [emoji] gives the skin-tone options, if any. */
 private class Cell(val text: String, val emoji: Emoji?)
 
+/** The emoji that stands for each category on its tab. */
 private val GROUP_ICONS = mapOf(
     "Smileys & Emotion" to "😀",
     "People & Body" to "👋",
@@ -97,6 +99,7 @@ private val Monochrome = RenderEffect.createColorFilterEffect(
     ColorMatrixColorFilter(ColorMatrix().apply { setSaturation(0f) }),
 ).asComposeRenderEffect()
 
+/** The grid's sections: recently used first (in the chosen skin tones), then each category. */
 private fun sectionsFor(
     catalog: EmojiCatalog,
     recents: List<String>,
@@ -255,6 +258,7 @@ internal fun EmojiPicker(state: KeyboardState, handlers: KeyHandlers, actions: E
     }
 }
 
+/** The row of category tabs under the grid; tapping one scrolls to that category. */
 @Composable
 private fun EmojiTabs(
     sections: List<Section>,

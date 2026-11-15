@@ -53,6 +53,11 @@ class KeyProximity(private val centers: Map<Int, FloatArray> = emptyMap()) {
     }
 
     companion object {
+        /**
+         * What typing one letter for another costs: almost nothing for a missing accent, less for
+         * a neighbouring key than a far one. Vowels are swapped for each other more often than
+         * distance suggests.
+         */
         const val ACCENT = 0.15f
         const val NEIGHBOR = 0.45f
         const val DIAGONAL = 0.7f

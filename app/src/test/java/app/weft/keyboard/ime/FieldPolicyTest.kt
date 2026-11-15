@@ -5,6 +5,12 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+/**
+ * Checks what the keyboard may do in each kind of field: nothing in passwords,
+ * suggestions but no autocorrect or swipe in emails and web addresses, the strip
+ * without autocorrect where the app asked for "no suggestions", the same words
+ * for tapping and swiping, and that the user's switches are respected.
+ */
 class FieldPolicyTest {
 
     private val plain = FieldTraits(

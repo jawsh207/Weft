@@ -10,14 +10,28 @@ import java.nio.channels.FileChannel
 /**
  * Read-only view over an .ekd dictionary built by tools/dictgen/build_dict.py.
  *
- * The file is a breadth-first trie stored as flat arrays, so it can be memory
- * mapped straight from the APK (assets are stored uncompressed) with no parsing
- * and almost no heap. A word's id is the index of its terminal node.
+ * The dictionary holds about 150,000 words with how common each is, which
+ * words tend to follow which (word pairs), and which follow a pair of words
+ * (three-word context).
+ *
+ * The file is a trie (a tree of letters, where each path from the root spells
+ * a word) laid out breadth-first as flat arrays. That lets the app memory-map
+ * it (see DictionaryLoader) and read it in place: no parsing at start-up and
+ * almost no memory of its own. A word's id is the index of its last letter's
+ * node; ids are what the pair and three-word tables refer to.
+ *
+ * Reads file format versions 1 to 3 (described in tools/dictgen/README.md).
  */
 class BinaryDictionary(buffer: ByteBuffer) {
 
+    /** Number of nodes in the trie (letters, not words); node 0 is the root. */
     val nodeCount: Int
+    /**
+     * The JSON the builder stored with the dictionary: language, word count, and every data source
+     * and its license.
+     */
     val meta: String
+    /** The file format version (1 to 3). */
     val version: Int
 
     // Node arrays. chars and childCounts come in the narrowest width that fits
@@ -122,14 +136,17 @@ class BinaryDictionary(buffer: ByteBuffer) {
         }
     }
 
+    /** The letter at [node], as a Unicode code point. */
     fun char(node: Int): Int = when (charWidth) {
         1 -> chars.get(node).toInt() and 0xFF
         2 -> chars.getShort(node * 2).toInt() and 0xFFFF
         else -> chars.getInt(node * 4)
     }
 
+    /** The index of [node]'s first child; its children sit next to each other from there. */
     fun firstChild(node: Int): Int = firstChild.get(node)
 
+    /** How many letters can follow [node]. */
     fun childCount(node: Int): Int =
         if (countWidth == 1) childCounts.get(node).toInt() and 0xFF else childCounts.getShort(node * 2).toInt() and 0xFFFF
 
@@ -155,6 +172,7 @@ class BinaryDictionary(buffer: ByteBuffer) {
     /** Highest word frequency in the subtree rooted at [node]. */
     fun maxSub(node: Int): Int = maxSubs.get(node).toInt() and 0xFF
 
+    /** Whether the word ending at [node] is flagged offensive: recognized as a word, never suggested. */
     fun isOffensive(node: Int): Boolean = (flags.get(node).toInt() and FLAG_OFFENSIVE) != 0
 
     /** Rebuilds the word ending at [node]. */
@@ -276,6 +294,7 @@ class BinaryDictionary(buffer: ByteBuffer) {
         return search(trigramSecond, trigramWordStart.get(group), trigramWordStart.get(group + 1) - 1, second)
     }
 
+    /** Version 2 files: the index of the (first, second) word pair in the three-word table, or -1. */
     private fun contextV2(first: Int, second: Int): Int {
         var lo = 0
         var hi = trigramContextCount - 1

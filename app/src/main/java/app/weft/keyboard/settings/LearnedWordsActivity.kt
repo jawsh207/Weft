@@ -72,6 +72,7 @@ class LearnedWordsActivity : ComponentActivity() {
     }
 }
 
+/** The four lists: new words, word pairs, words never corrected, and words removed from suggestions. */
 private enum class LearnedTab(val title: Int, val empty: Int) {
     Words(R.string.learned_tab_words, R.string.learned_empty_words),
     Pairs(R.string.learned_tab_pairs, R.string.learned_empty_pairs),
@@ -85,6 +86,7 @@ private data class Item(val key: String, val title: String, val detail: String?,
 /** What an add/edit dialog is editing. */
 private data class Editing(val tab: LearnedTab, val row: Item?)
 
+/** The whole screen: tabs, the list for the selected tab, and the add / edit / delete dialogs. */
 @Composable
 private fun LearnedWordsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
@@ -247,6 +249,7 @@ private fun LearnedWordsScreen(onBack: () -> Unit) {
     }
 }
 
+/** One entry in a list, with edit and delete buttons. */
 @Composable
 private fun LearnedRow(row: Item, deleteLabel: String, onEdit: () -> Unit, onDelete: () -> Unit) {
     ListItem(

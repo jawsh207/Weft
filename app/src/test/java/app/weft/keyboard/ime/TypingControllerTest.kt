@@ -13,6 +13,11 @@ import org.junit.Before
 import org.junit.Test
 import java.nio.ByteBuffer
 
+/**
+ * Types into a fake text field and checks the word-level behavior: autocorrect on space and its
+ * undo on backspace, picking suggestions, spacing around punctuation, the capital "I", swiped
+ * words, emoji suggestions, and what gets learned or forgotten.
+ */
 class TypingControllerTest {
 
     /** A text field with the cursor at the end. */

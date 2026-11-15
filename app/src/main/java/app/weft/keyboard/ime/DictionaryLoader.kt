@@ -10,10 +10,18 @@ import java.io.FileNotFoundException
 import java.nio.ByteBuffer
 import java.util.zip.GZIPInputStream
 
-/** Android-side loading for the platform-independent prediction engine. */
+/**
+ * Finds the word list for a keyboard language inside the app and opens it, and
+ * reads the phone's personal dictionary. The prediction code itself (the
+ * predict package) knows nothing about Android; this is the part that does.
+ */
 object DictionaryLoader {
     private const val TAG = "DictionaryLoader"
 
+    /**
+     * Where an uncompressed dictionary for [locale] would sit in the APK (builds normally ship
+     * [packedPath]).
+     */
     fun assetPath(locale: String) = "dictionaries/main_$locale.ekd"
 
     /** English variants fall back to US English if their dictionary is missing. */
@@ -33,6 +41,10 @@ object DictionaryLoader {
     fun load(context: Context, locale: String): BinaryDictionary? =
         loadExact(context, locale) ?: if (locale != FALLBACK) loadExact(context, FALLBACK) else null
 
+    /**
+     * The dictionary for exactly [locale], with no fallback: uncompressed asset first, then the
+     * gzipped one.
+     */
     private fun loadExact(context: Context, locale: String): BinaryDictionary? {
         val path = assetPath(locale)
         try {
@@ -55,6 +67,7 @@ object DictionaryLoader {
             .getOrNull()
     }
 
+    /** Where the gzipped dictionary for [locale] sits in the APK. */
     fun packedPath(locale: String) = "dictionaries/main_$locale.ekdz"
 
     /** Unpacks dictionaries/main_<locale>.ekdz once per app version; null if there's no such asset. */

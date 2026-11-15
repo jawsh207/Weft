@@ -6,6 +6,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.nio.file.Files
 
+/**
+ * Checks what the keyboard learns and remembers: new words after enough uses, personal frequency
+ * and word pairs, "never correct" and removed words, swipe habits, editing from settings, and
+ * saving and loading the files.
+ */
 class LearnedWordsTest {
 
     @Test

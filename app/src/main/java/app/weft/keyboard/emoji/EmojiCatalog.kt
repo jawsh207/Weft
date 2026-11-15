@@ -10,6 +10,7 @@ data class Emoji(
     val picks: Map<String, Int> = emptyMap(),
 )
 
+/** A named section of the picker ("Smileys & Emotion", "Food & Drink"…), in Unicode's order. */
 data class EmojiGroup(val name: String, val emoji: List<Emoji>)
 
 /**
@@ -33,15 +34,6 @@ class EmojiCatalog(val groups: List<EmojiGroup>) {
     fun find(text: String): Emoji? = byText[text]
 
     /**
-     * Search by name and keyword. Every word typed must start a word of the
-     * emoji's name or keywords ("thu up" finds "thumbs up", "lol" finds 😂).
-     * Ranking: exact name, hand-picked keywords and shortcodes (in their listed
-     * order, so "lol" → 😂 🤣 and ":joy:" → 😂), whole words in the name, an
-     * exact keyword, name prefix, then anything else; shorter names first within
-     * each, so the plain emoji leads ("heart" → ❤️ before 💘). Colons around a
-     * shortcode are ignored.
-     */
-    /**
      * The emoji a typed word clearly names, for the suggestion strip: an emoji
      * whose name is the word ("pizza" → 🍕, "dog" → 🐕) or a hand-picked keyword
      * ("lol" → 😂). Plurals count ("pizzas"). Looser keyword matches don't, so
@@ -53,6 +45,7 @@ class EmojiCatalog(val groups: List<EmojiGroup>) {
         return direct[w] ?: (if (w.length > 3 && w.endsWith("s")) direct[w.dropLast(1)] else null)
     }
 
+    /** Word → the one emoji it names, for [suggestFor]. Built on first use. */
     private val direct: Map<String, Emoji> by lazy {
         val out = HashMap<String, Emoji>()
         // Hand-picked keywords first (lowest pick order wins), then exact names.
@@ -66,6 +59,15 @@ class EmojiCatalog(val groups: List<EmojiGroup>) {
         out
     }
 
+    /**
+     * Search by name and keyword. Every word typed must start a word of the
+     * emoji's name or keywords ("thu up" finds "thumbs up", "lol" finds 😂).
+     * Ranking: exact name, hand-picked keywords and shortcodes (in their listed
+     * order, so "lol" → 😂 🤣 and ":joy:" → 😂), whole words in the name, an
+     * exact keyword, name prefix, then anything else; shorter names first within
+     * each, so the plain emoji leads ("heart" → ❤️ before 💘). Colons around a
+     * shortcode are ignored.
+     */
     fun search(query: String, limit: Int = 60): List<Emoji> {
         val q = query.trim().lowercase().trim(':')
         if (q.isEmpty()) return emptyList()

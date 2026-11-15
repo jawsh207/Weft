@@ -11,12 +11,20 @@ import app.weft.keyboard.layout.KeyboardPage
 import app.weft.keyboard.ui.HapticLevel
 import app.weft.keyboard.ui.KeyHeight
 
+/** The shift key: off, on for the next letter only, or caps lock. */
 enum class ShiftState { Off, Once, Locked }
 
-/** UI state observed by the Compose keyboard. Owned by the IME service. */
+/**
+ * Everything the keyboard on screen depends on: which page is showing, shift,
+ * the suggestions, emoji picker state, look-and-feel settings and status
+ * messages. The service ([WeftKeyboardService]) changes these values; the
+ * Compose UI redraws whatever depends on the one that changed.
+ */
 @Stable
 class KeyboardState {
+    /** The page showing: letters, symbols, number pad or emoji. */
     var page by mutableStateOf(KeyboardPage.Letters)
+    /** Shift or caps lock, also set automatically at the start of a sentence. */
     var shift by mutableStateOf(ShiftState.Off)
 
     /** Resolved editor action for the enter key, or IME_ACTION_NONE for a newline. */
@@ -29,7 +37,9 @@ class KeyboardState {
     var pendingRemoval by mutableStateOf<String?>(null)
 
     // --- Emoji picker ---
+    /** The emoji list, once loaded from assets; null until then. */
     var emojiCatalog by mutableStateOf<EmojiCatalog?>(null)
+    /** Recently used emoji, most recent first. */
     var emojiRecents by mutableStateOf<List<String>>(emptyList())
 
     /** Chosen skin tone per base emoji. */
@@ -48,15 +58,19 @@ class KeyboardState {
     var clipboardHasContent by mutableStateOf(false)
 
     // --- Look and feel (Settings) ---
+    /** Vibration strength for key presses. */
     var haptics by mutableStateOf(HapticLevel.Normal)
+    /** Short, normal or tall keys. */
     var keyHeight by mutableStateOf(KeyHeight.Normal)
+    /** Whether a row of digits shows above the letters. */
     var numberRow by mutableStateOf(false)
 
     /** Tapered swipe trail and lit letters (Settings › Swipe › Enhanced visuals); off shows a plain trail. */
     var swipeVisuals by mutableStateOf(true)
 
-
+    /** The phone has a speech engine, so the mic key is shown. */
     var voiceAvailable by mutableStateOf(false)
+    /** Voice input is running; the strip shows its status instead of suggestions. */
     var listening by mutableStateOf(false)
 
     /** Short status line in the strip (voice errors etc.). Null = nothing to show. */

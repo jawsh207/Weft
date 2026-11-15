@@ -40,10 +40,16 @@ import kotlin.math.roundToInt
  */
 @Stable
 class AlternatesPopup {
+    /** The choices showing; empty when the popup is closed. */
     var options by mutableStateOf<List<String>>(emptyList())
         private set
+    /** Index of the highlighted choice. */
     var selected by mutableIntStateOf(0)
         private set
+    /**
+     * The key the popup belongs to, and the popup's own position and cell size, in px within the
+     * keyboard.
+     */
     var anchor by mutableStateOf(Rect.Zero)
         private set
     var left by mutableFloatStateOf(0f)
@@ -63,13 +69,20 @@ class AlternatesPopup {
     /** Gap between the popup and the key it came from, in px. */
     var lift = 0f
 
+    /** Called with the choice when the finger lifts, unless [open] was given its own handler. */
     var onPick: (String) -> Unit = {}
 
+    /** Whether the popup is showing. */
     val isOpen: Boolean get() = options.isNotEmpty()
+    /** How many rows the choices take up. */
     val rows: Int get() = (options.size + columns - 1) / columns
 
     private var pickOverride: ((String) -> Unit)? = null
 
+    /**
+     * Opens the popup above [key] with [choices], wrapping onto more rows if they don't fit across
+     * the keyboard. [onPickThis] replaces [onPick] for this popup only (emoji skin tones use it).
+     */
     fun open(choices: List<String>, key: Rect, onPickThis: ((String) -> Unit)? = null) {
         if (choices.isEmpty()) return
         pickOverride = onPickThis
@@ -99,6 +112,7 @@ class AlternatesPopup {
         selected = (rowFromBottom * columns + column).coerceAtMost(options.lastIndex)
     }
 
+    /** The finger lifted: pick the highlighted choice and close. */
     fun commit() {
         val choice = options.getOrNull(selected)
         val pick = pickOverride ?: onPick
@@ -106,6 +120,7 @@ class AlternatesPopup {
         if (choice != null) pick(choice)
     }
 
+    /** Closes the popup without picking anything. */
     fun dismiss() {
         options = emptyList()
     }
@@ -116,6 +131,7 @@ class AlternatesPopup {
     }
 }
 
+/** Draws the popup over the keyboard when it is open. */
 @Composable
 fun AlternatesOverlay(popup: AlternatesPopup) {
     val density = LocalDensity.current

@@ -25,6 +25,7 @@ enum class HapticLevel(val key: String) {
     ;
 
     companion object {
+        /** The level saved as [key]; Normal if nothing (or something unknown) is saved. */
         fun of(key: String?) = entries.firstOrNull { it.key == key } ?: Normal
     }
 }
@@ -37,6 +38,7 @@ enum class KeyHeight(val key: String, val row: Dp) {
     ;
 
     companion object {
+        /** The height saved as [key]; Normal if nothing (or something unknown) is saved. */
         fun of(key: String?) = entries.firstOrNull { it.key == key } ?: Normal
     }
 }
@@ -71,6 +73,10 @@ class KeyHaptics(context: Context, val level: HapticLevel) {
         if (level != HapticLevel.Off) view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
     }
 
+    /**
+     * Plays one of the vibrator's built-in effects, or the view's own feedback on a phone without
+     * a vibrator.
+     */
     private fun vibrate(effect: Int, view: View, fallback: Int) {
         val v = vibrator
         if (v == null) {
@@ -81,8 +87,10 @@ class KeyHaptics(context: Context, val level: HapticLevel) {
     }
 }
 
+/** The haptics for the keys below this point in the UI; null in previews. */
 internal val LocalKeyHaptics = staticCompositionLocalOf<KeyHaptics?> { null }
 
+/** The key row height for the keys below this point in the UI. */
 internal val LocalRowHeight = compositionLocalOf { KeyHeight.Normal.row }
 
 /** Height of one key row, from settings. */

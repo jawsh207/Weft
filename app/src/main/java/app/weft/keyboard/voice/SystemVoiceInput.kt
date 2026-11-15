@@ -19,10 +19,15 @@ class SystemVoiceInput(
     private val context: Context,
     private val listener: Listener,
 ) {
+    /** What the keyboard hears back from the speech engine. */
     interface Listener {
+        /** Listening started or ended, for the mic key and the status in the strip. */
         fun onListeningChanged(listening: Boolean)
+        /** The words recognized so far; replaced as the engine refines them. */
         fun onPartial(text: String)
+        /** The finished text for what was said. */
         fun onFinal(text: String)
+        /** The engine gave up; [error] is one of SpeechRecognizer's ERROR_ codes. */
         fun onError(error: Int)
     }
 
@@ -76,6 +81,7 @@ class SystemVoiceInput(
         recognizer?.stopListening()
     }
 
+    /** Stops at once and discards anything not yet delivered (the keyboard was put away). */
     fun stop() {
         val r = recognizer ?: return
         recognizer = null
@@ -107,6 +113,7 @@ class SystemVoiceInput(
         override fun onEvent(eventType: Int, params: Bundle?) = Unit
     }
 
+    /** The engine's first (most likely) transcription, or null if it is empty. */
     private fun bestResult(bundle: Bundle): String? =
         bundle.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
             ?.firstOrNull()

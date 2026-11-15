@@ -27,9 +27,15 @@ import kotlin.math.min
  */
 class LearnedWords(private val file: File?, private val historyFile: File? = null) {
 
+    /**
+     * How many times something was used and when it was last used (for dropping the least useful
+     * when full).
+     */
     private class Entry(var count: Int, var lastUsed: Long)
 
+    /** New words exactly as typed → uses. */
     private val words = ConcurrentHashMap<String, Entry>()
+    /** Words from the phone's personal dictionary → frequency. Never written to our files. */
     private val system = ConcurrentHashMap<String, Int>()
 
     /** Lowercase word → uses. */
@@ -37,6 +43,7 @@ class LearnedWords(private val file: File?, private val historyFile: File? = nul
 
     /** Lowercase previous word → (lowercase next word → uses). */
     private val pairs = ConcurrentHashMap<String, ConcurrentHashMap<String, Entry>>()
+    /** Lowercase words whose autocorrect the user undid. */
     private val neverCorrect: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     // Swipe habits: running average offset (key widths) and "picked X over the first guess Y".
@@ -44,6 +51,7 @@ class LearnedWords(private val file: File?, private val historyFile: File? = nul
     @Volatile private var swipeDy = 0f
     @Volatile private var swipeSamples = 0
     private val swipeChoices = ConcurrentHashMap<String, Entry>()
+    /** Lowercase words the user removed from suggestions. */
     private val removed: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     @Volatile
@@ -60,6 +68,7 @@ class LearnedWords(private val file: File?, private val historyFile: File? = nul
         loaded = true
     }
 
+    /** Reads the saved files into memory. Prefer [ensureLoaded], which does this once. */
     fun load() {
         file?.takeIf { it.exists() }?.forEachLine { line ->
             val parts = line.split('\t')
@@ -124,6 +133,10 @@ class LearnedWords(private val file: File?, private val historyFile: File? = nul
 
     // --- New words -----------------------------------------------------------------------
 
+    /**
+     * Counts one use of a new word. [explicit] (picked from the strip) makes it a suggestion at
+     * once; typing a removed word brings it back.
+     */
     fun recordUse(word: String, explicit: Boolean = false, now: Long = System.currentTimeMillis()) {
         if (!isStorable(word)) return
         removed -= word.lowercase()
@@ -136,10 +149,12 @@ class LearnedWords(private val file: File?, private val historyFile: File? = nul
     /** True if [word] has been recorded at all, even once. */
     fun has(word: String): Boolean = words.containsKey(word)
 
+    /** Drops a new word completely. */
     fun forget(word: String) {
         if (words.remove(word) != null) dirty = true
     }
 
+    /** Replaces the copy of the phone's personal dictionary. */
     fun setSystemWords(entries: Map<String, Int>) {
         system.clear()
         entries.forEach { (w, f) -> if (isStorable(w)) system[w] = f.coerceIn(1, 255) }
@@ -157,6 +172,7 @@ class LearnedWords(private val file: File?, private val historyFile: File? = nul
                 .filter { !isRemoved(it.key) }
                 .map { it.key to (it.value / 2 + 100).coerceAtMost(220) }
 
+    /** Number of new words recorded, learned or not (for settings). */
     val size: Int get() = words.size
 
     // --- Personal frequency and word pairs ----------------------------------------------
@@ -218,6 +234,7 @@ class LearnedWords(private val file: File?, private val historyFile: File? = nul
         if (neverCorrect.add(word.lowercase())) dirty = true
     }
 
+    /** Whether the user undid a correction to [word] before, so it shouldn't be corrected. */
     fun isKeptAsTyped(word: String): Boolean = word.lowercase() in neverCorrect
 
     /**
@@ -236,6 +253,7 @@ class LearnedWords(private val file: File?, private val historyFile: File? = nul
         dirty = true
     }
 
+    /** Whether the user removed [word] from suggestions. */
     fun isRemoved(word: String): Boolean = removed.isNotEmpty() && word.lowercase() in removed
 
     /** Brings back a removed word, e.g. when the user picks it as typed. */
@@ -302,18 +320,23 @@ class LearnedWords(private val file: File?, private val historyFile: File? = nul
     /** A new word the user has typed: [learned] once it's used enough to be suggested. */
     data class NewWord(val word: String, val uses: Int, val lastUsed: Long, val learned: Boolean)
 
+    /** A word the user typed after another, and how often. */
     data class WordPair(val first: String, val second: String, val uses: Int, val lastUsed: Long)
 
+    /** Every new word, alphabetically, for Settings › Learned words. */
     fun newWords(): List<NewWord> =
         words.entries.map { NewWord(it.key, it.value.count, it.value.lastUsed, it.value.count >= MIN_USES) }
             .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.word })
 
+    /** Every learned word pair, alphabetically. */
     fun wordPairs(): List<WordPair> =
         pairs.entries.flatMap { (first, next) -> next.entries.map { WordPair(first, it.key, it.value.count, it.value.lastUsed) } }
             .sortedWith(compareBy<WordPair> { it.first }.thenBy { it.second })
 
+    /** The "never correct" words, alphabetically. */
     fun keptAsTypedWords(): List<String> = neverCorrect.sorted()
 
+    /** The words removed from suggestions, alphabetically. */
     fun removedWords(): List<String> = removed.sorted()
 
     /** Adds [word] as a learned word right away, as if picked from the strip. */
@@ -357,6 +380,7 @@ class LearnedWords(private val file: File?, private val historyFile: File? = nul
         dirty = true
     }
 
+    /** Forgets that [second] follows [first]. */
     fun deletePair(first: String, second: String) {
         val next = pairs[first.lowercase()] ?: return
         if (next.remove(second.lowercase()) != null) dirty = true
@@ -393,6 +417,7 @@ class LearnedWords(private val file: File?, private val historyFile: File? = nul
         if (neverCorrect.remove(word.lowercase())) dirty = true
     }
 
+    /** Changes a "never correct" word; false if [new] isn't something that can be stored. */
     fun editKeptAsTyped(old: String, new: String): Boolean {
         val n = new.trim()
         if (!isStorable(n)) return false
@@ -401,6 +426,7 @@ class LearnedWords(private val file: File?, private val historyFile: File? = nul
         return true
     }
 
+    /** Changes a removed word; false if [new] isn't something that can be stored. */
     fun editRemoved(old: String, new: String): Boolean {
         val n = new.trim()
         if (!isStorable(n) && n.length != 1) return false
@@ -410,6 +436,10 @@ class LearnedWords(private val file: File?, private val historyFile: File? = nul
         return true
     }
 
+    /**
+     * Moves a word's use counts and pairs to its new spelling, adding to any the new spelling
+     * already has.
+     */
     private fun renameInHistory(old: String, new: String) {
         usage.remove(old)?.let { e ->
             val x = usage[new]
@@ -424,11 +454,16 @@ class LearnedWords(private val file: File?, private val historyFile: File? = nul
         }
     }
 
+    /** Whether [w] can be part of a word pair: a storable word or a single letter ("a", "I"). */
     private fun isPairWord(w: String) = (isStorable(w) || w.length == 1) && w.any { it.isLetter() }
 
     /** Number of word pairs learned (for settings). */
     val pairCount: Int get() = pairs.values.sumOf { it.size }
 
+    /**
+     * Keeps the files small: when a list is over its limit, the least used, least recent entries
+     * go first.
+     */
     private fun prune() {
         if (words.size > MAX_WORDS) {
             words.entries
@@ -452,25 +487,38 @@ class LearnedWords(private val file: File?, private val historyFile: File? = nul
         }
     }
 
+    /** Writes to a temporary file and renames it, so a crash mid-save can't leave a half-written file. */
     private fun writeAtomically(f: File, body: (java.io.Writer) -> Unit) {
         val tmp = File(f.parentFile, f.name + ".tmp")
         tmp.bufferedWriter().use(body)
         tmp.renameTo(f)
     }
 
+    /** Words of 2 to 32 characters with no whitespace: the tab-separated files can't hold anything else. */
     private fun isStorable(word: String): Boolean =
         word.length in 2..32 && word.none { it == '\t' || it == '\n' || it.isWhitespace() }
 
     companion object {
+        /** Uses before a new word becomes a suggestion. */
         const val MIN_USES = 2
+        /** Limits on how much is kept (see [prune]). */
         const val MAX_WORDS = 5000
         const val MAX_USAGE = 20_000
         const val MAX_PAIRS = 30_000
+        /** Uses before a word pair affects predictions. */
         const val PAIR_MIN_USES = 2
+        /**
+         * How much the user's own use of a word, a pair, or a swipe choice raises its rank, and
+         * the most it can.
+         */
         const val BOOST_PER_LOG_USE = 0.35f
         const val MAX_BOOST = 1.5f
         const val PAIR_BOOST_PER_USE = 0.6f
         const val MAX_PAIR_BOOST = 3f
+        /**
+         * Swipes before the thumb offset is trusted, how fast it adapts, and the largest offset
+         * (key widths).
+         */
         const val MIN_SWIPE_SAMPLES = 15
         const val SWIPE_OFFSET_RATE = 0.05f
         const val MAX_SWIPE_OFFSET = 0.6f
