@@ -6,6 +6,8 @@ import android.content.res.Configuration
 import android.graphics.Paint
 import android.icu.text.BreakIterator
 import android.inputmethodservice.InputMethodService
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.speech.SpeechRecognizer
 import android.text.InputType
@@ -68,9 +70,29 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * The keyboard. Hosts Compose inside an InputMethodService, which needs the
- * service to act as the lifecycle / saved-state / view-model owner that an
- * Activity would normally provide.
+ * The keyboard itself: the Android service the system starts when Weft is the
+ * selected keyboard. It shows the keys (drawn with Compose, see
+ * [KeyboardScreen]), receives every key press, swipe, suggestion tap and voice
+ * result, and writes the resulting text into whichever app's text field has
+ * focus.
+ *
+ * What it does itself: decides which page to show for a field (letters, number
+ * pad…), what the enter key does, shift and caps lock, backspace, paste, the
+ * emoji search box, and starting voice input. What it hands on: word
+ * suggestions, autocorrect and learning go to [TypingController]; swipe paths
+ * to [SwipeDecoder]; speech to [SystemVoiceInput].
+ *
+ * Things that are the way they are for a reason:
+ *  - Compose expects to live in an Activity. A keyboard isn't one, so this
+ *    service stands in as the lifecycle / saved-state / view-model owner.
+ *  - Asking the app for its text (through the input connection) is a call into
+ *    another process that can stall for seconds when that app is busy, a web
+ *    page still loading, for instance. Nothing here asks the app anything
+ *    before the keyboard is on screen, and slow answers are written to
+ *    [KeyboardLog].
+ *  - It never uses Android's full-screen "extract" mode: in landscape that mode
+ *    replaces the app with a bare text box, and it makes Android ignore an
+ *    app's request to show the keyboard unless the user tapped the field.
  */
 class WeftKeyboardService :
     InputMethodService(),
@@ -104,6 +126,20 @@ class WeftKeyboardService :
     private var suggestJob: Job? = null
     private var swipeJob: Job? = null
 
+    /** The keys' view, kept to report its size in [KeyboardLog] when the window shows. */
+    private var inputView: View? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    /**
+     * Reads the field's text for auto-capitals and suggestions. Posted from
+     * onStartInputView rather than run in it, so the keyboard is on screen
+     * before the app is asked anything (see the class description).
+     */
+    private val readField = Runnable {
+        updateAutoCaps()
+        refreshSuggestions()
+    }
+
     @Volatile
     private var swipeDecoder: SwipeDecoder? = null
     private var swipeAllowed = false
@@ -120,7 +156,7 @@ class WeftKeyboardService :
     /** The current text field, for [TypingController]. */
     private val editor = object : TextEditor {
         override fun textBeforeCursor(length: Int): CharSequence? =
-            currentInputConnection?.getTextBeforeCursor(length, 0)
+            timed("text before the cursor") { currentInputConnection?.getTextBeforeCursor(length, 0) }
 
         override fun deleteBefore(length: Int) {
             currentInputConnection?.deleteSurroundingText(length, 0)
@@ -141,8 +177,20 @@ class WeftKeyboardService :
         }
     }
 
+    /** Runs a question to the app and notes it in [KeyboardLog] if the answer was slow. */
+    private inline fun <T> timed(what: String, ask: () -> T): T {
+        val start = SystemClock.uptimeMillis()
+        val answer = ask()
+        val took = SystemClock.uptimeMillis() - start
+        if (took >= SLOW_REPLY_MS) KeyboardLog.note("the app took $took ms to answer ($what)")
+        return answer
+    }
+
     override fun onCreate() {
         super.onCreate()
+        KeyboardLog.attach(noBackupFilesDir)
+        KeyboardLog.installCrashHandler()
+        KeyboardLog.note("keyboard service started")
         savedStateController.performRestore(null)
         moveLifecycleTo(Lifecycle.State.CREATED)
         voice = SystemVoiceInput(this, voiceListener)
@@ -265,13 +313,64 @@ class WeftKeyboardService :
         return tag?.takeIf { it.isNotEmpty() }?.replace('-', '_') ?: "en_US"
     }
 
+    // --- Showing and hiding ------------------------------------------------------------
+
+    /** Never full-screen "extract" mode, in any orientation (see the class description). */
+    override fun onEvaluateFullscreenMode(): Boolean = false
+
+    /** A text field got focus (the keyboard may or may not be shown for it). */
+    override fun onStartInput(attribute: EditorInfo?, restarting: Boolean) {
+        super.onStartInput(attribute, restarting)
+        KeyboardLog.note(
+            "field focused in ${attribute?.packageName}: type 0x%x, options 0x%x%s".format(
+                attribute?.inputType ?: 0, attribute?.imeOptions ?: 0, if (restarting) ", same field again" else "",
+            ),
+        )
+    }
+
+    override fun onFinishInput() {
+        KeyboardLog.note("field left")
+        super.onFinishInput()
+    }
+
+    /**
+     * Android asks whether to show the keyboard. The answer is the system's own;
+     * this only writes it down, with the usual reasons when the answer is no.
+     */
+    override fun onShowInputRequested(flags: Int, configChange: Boolean): Boolean {
+        val show = super.onShowInputRequested(flags, configChange)
+        val config = resources.configuration
+        KeyboardLog.note(
+            "show requested (flags $flags): " + if (show) "yes" else
+                "NO. Hardware keyboard: ${config.keyboard != Configuration.KEYBOARD_NOKEYS}" +
+                    " (hidden: ${config.hardKeyboardHidden == Configuration.HARDKEYBOARDHIDDEN_YES})" +
+                    ", shown with one allowed: ${onEvaluateInputViewShown()}",
+        )
+        return show
+    }
+
+    override fun onWindowShown() {
+        super.onWindowShown()
+        KeyboardLog.note("window shown")
+        // After layout: a keyboard that is "shown" but has no height looks like one that never opened.
+        inputView?.post { KeyboardLog.note("keyboard size ${inputView?.width}x${inputView?.height}") }
+    }
+
+    override fun onWindowHidden() {
+        super.onWindowHidden()
+        KeyboardLog.note("window hidden")
+        lifecycleScope.launch(Dispatchers.IO) { KeyboardLog.save() }
+    }
+
     override fun onCreateInputView(): View {
+        KeyboardLog.note("building the keys")
         window.window?.decorView?.let { root ->
             root.setViewTreeLifecycleOwner(this)
             root.setViewTreeViewModelStoreOwner(this)
             root.setViewTreeSavedStateRegistryOwner(this)
         }
         return ComposeView(this).apply {
+            inputView = this
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
             setContent {
                 SystemTheme(epoch = state.themeEpoch) {
@@ -302,6 +401,7 @@ class WeftKeyboardService :
     }
 
     override fun onStartInputView(info: EditorInfo, restarting: Boolean) {
+        val began = SystemClock.uptimeMillis()
         super.onStartInputView(info, restarting)
         moveLifecycleTo(Lifecycle.State.RESUMED)
 
@@ -319,11 +419,19 @@ class WeftKeyboardService :
             InputType.TYPE_CLASS_DATETIME -> KeyboardPage.Symbols
             else -> KeyboardPage.Letters
         }
-        if (state.shift != ShiftState.Locked) state.shift = ShiftState.Off
+        // The field says up front whether it starts with a capital: no need to ask the app.
+        if (state.shift != ShiftState.Locked) {
+            val capital = info.initialCapsMode != 0 && state.page == KeyboardPage.Letters
+            state.shift = if (capital) ShiftState.Once else ShiftState.Off
+        }
         applyLookAndFeel(Prefs.of(this))
         configurePrediction(info)
-        updateAutoCaps()
-        refreshSuggestions()
+        // Suggestions belong to the last field until this one's text has been read.
+        suggestJob?.cancel()
+        state.suggestions = emptyList()
+        mainHandler.removeCallbacks(readField)
+        mainHandler.post(readField)
+        KeyboardLog.note("keyboard ready for ${info.packageName} in ${SystemClock.uptimeMillis() - began} ms")
     }
 
     /** Applies user settings and what the field allows (passwords, incognito, URLs…). */
@@ -364,6 +472,8 @@ class WeftKeyboardService :
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
+        KeyboardLog.note("keyboard put away")
+        mainHandler.removeCallbacks(readField)
         voice.stop()
         suggestJob?.cancel()
         currentInputConnection?.finishComposingText()
@@ -374,6 +484,11 @@ class WeftKeyboardService :
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        KeyboardLog.note(
+            "phone settings changed: " +
+                (if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE) "landscape" else "portrait") +
+                ", hardware keyboard: ${newConfig.keyboard != Configuration.KEYBOARD_NOKEYS}",
+        )
         state.themeEpoch++ // dark mode, palette, contrast or font changes
     }
 
@@ -392,6 +507,8 @@ class WeftKeyboardService :
     }
 
     override fun onDestroy() {
+        KeyboardLog.note("keyboard service stopped")
+        mainHandler.removeCallbacks(readField)
         voice.stop()
         clipboard.removePrimaryClipChangedListener(clipListener)
         Prefs.of(this).unregisterOnSharedPreferenceChangeListener(prefsListener)
@@ -400,6 +517,7 @@ class WeftKeyboardService :
         super.onDestroy()
         suggestJob?.cancel()
         learned.save()
+        KeyboardLog.save()
         moveLifecycleTo(Lifecycle.State.DESTROYED)
         store.clear()
     }
@@ -612,7 +730,8 @@ class WeftKeyboardService :
         if (state.shift == ShiftState.Locked || state.page != KeyboardPage.Letters) return
         val ic = currentInputConnection ?: return
         val inputType = currentInputEditorInfo?.inputType ?: return
-        state.shift = if (ic.getCursorCapsMode(inputType) != 0) ShiftState.Once else ShiftState.Off
+        val caps = timed("whether to capitalize") { ic.getCursorCapsMode(inputType) }
+        state.shift = if (caps != 0) ShiftState.Once else ShiftState.Off
     }
 
     // --- Tools row --------------------------------------------------------------------
@@ -718,6 +837,9 @@ class WeftKeyboardService :
 
     private companion object {
         const val DOUBLE_TAP_MS = 300L
+
+        /** An app answering slower than this (ms) is worth a line in [KeyboardLog]. */
+        const val SLOW_REPLY_MS = 150L
         const val GRAPHEME_LOOKBACK = 64
         const val VOICE_CONTEXT = 64
         const val EMOJI_ASSET = "emoji/emoji.txt"

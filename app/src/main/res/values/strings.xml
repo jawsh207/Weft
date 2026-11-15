@@ -61,7 +61,7 @@
     <string name="settings_page_voice">Voice input</string>
     <string name="settings_page_voice_summary">Speech engine and offline voice</string>
     <string name="settings_page_about">About</string>
-    <string name="settings_page_about_summary">Dictionary sources, emoji data</string>
+    <string name="settings_page_about_summary">Dictionary sources, emoji data, troubleshooting</string>
     <string name="settings_swipe_learning_note">Swipe learns where your thumb tends to land and which look-alike word you mean. You\'ll find it, and can clear it, under Learning.</string>
     <string name="settings_voice_engine">Choose speech engine</string>
     <string name="settings_voice_note">Weft always uses the speech engine chosen in your phone\'s settings (Languages › Speech › Voice input). Punctuation goes in only when you say it (\u201Cperiod\u201D, \u201Ccomma\u201D, \u201Cquestion mark\u201D, \u201Cnew line\u201D…).</string>
@@ -134,4 +134,9 @@
     <string name="settings_dictionary_sources">Built from these open sources:</string>
     <string name="settings_emoji_title">Emoji</string>
     <string name="settings_emoji_body">Emoji are drawn with your phone\'s own emoji font. The list, names and skin tones come from Unicode\'s emoji data. Search keywords come from Unicode CLDR (Unicode License v3), emojilib and GitHub\'s gemoji shortcodes (MIT). License texts are included with the app.</string>
+    <string name="settings_log_title">Troubleshooting</string>
+    <string name="settings_log_body">Weft keeps a short log of when it was asked to open, whether it did, and any crash, to help find problems that only happen now and then. It notes which app and what kind of field, never what you type, and it stays on this phone unless you copy and share it.</string>
+    <string name="settings_log_copy">Copy log</string>
+    <string name="settings_log_clear">Clear</string>
+    <string name="settings_log_empty">(The log is empty.)</string>
 </resources>

@@ -1,10 +1,13 @@
 package app.weft.keyboard.settings
 
 import android.Manifest
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import app.weft.keyboard.voice.VoiceSettings
@@ -56,6 +59,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
+import app.weft.keyboard.ime.KeyboardLog
 import app.weft.keyboard.ime.LearnedStore
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
@@ -73,6 +77,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -487,7 +492,7 @@ internal fun VoiceSection() {
     Note(stringResource(R.string.settings_voice_note))
 }
 
-/** Settings › About: where the dictionary and emoji data come from. */
+/** Settings › About: where the dictionary and emoji data come from, and the troubleshooting log. */
 @Composable
 internal fun AboutSection() {
     DictionaryInfo()
@@ -498,6 +503,52 @@ internal fun AboutSection() {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+    Troubleshooting()
+}
+
+/**
+ * Settings › About › Troubleshooting: copy or clear the keyboard's log
+ * ([KeyboardLog]) so an occasional problem, like the keyboard not opening,
+ * can be looked into. The copy starts with the app and Android versions.
+ */
+@Composable
+private fun Troubleshooting() {
+    val context = LocalContext.current
+    var cleared by remember { mutableStateOf(false) }
+    SectionCard(stringResource(R.string.settings_log_title)) {
+        Text(
+            stringResource(R.string.settings_log_body),
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+        ) {
+            TextButton(
+                enabled = !cleared,
+                onClick = {
+                    KeyboardLog.clear()
+                    cleared = true
+                },
+            ) { Text(stringResource(R.string.settings_log_clear)) }
+            OutlinedButton(
+                onClick = {
+                    KeyboardLog.attach(context.noBackupFilesDir) // in case the keyboard hasn't run in this process
+                    val version = runCatching {
+                        context.packageManager.getPackageInfo(context.packageName, 0).versionName
+                    }.getOrNull()
+                    val header = "Weft $version, Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT}), " +
+                        "${Build.MANUFACTURER} ${Build.MODEL}"
+                    val body = KeyboardLog.text().ifEmpty { context.getString(R.string.settings_log_empty) }
+                    context.getSystemService(ClipboardManager::class.java)
+                        ?.setPrimaryClip(ClipData.newPlainText("Weft keyboard log", "$header\n$body"))
+                    cleared = false
+                },
+            ) { Text(stringResource(R.string.settings_log_copy)) }
+        }
     }
 }
 
