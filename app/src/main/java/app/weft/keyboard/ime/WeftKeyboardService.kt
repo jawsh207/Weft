@@ -11,6 +11,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.speech.SpeechRecognizer
 import android.text.InputType
+import android.view.KeyCharacterMap
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -77,8 +78,9 @@ import kotlinx.coroutines.withContext
  * focus.
  *
  * What it does itself: decides which page to show for a field (letters, number
- * pad…), what the enter key does, shift and caps lock, backspace, paste, the
- * emoji search box, and starting voice input. What it hands on: word
+ * pad…), what the enter key does, shift and caps lock, backspace, the tools
+ * row (undo, select all, cut, copy, paste), the emoji search box, and starting
+ * voice input. What it hands on: word
  * suggestions, autocorrect and learning go to [TypingController]; swipe paths
  * to [SwipeDecoder]; speech to [SystemVoiceInput].
  *
@@ -411,6 +413,11 @@ class WeftKeyboardService :
                         ),
                         tools = ToolActions(
                             onToggle = { state.toolsOpen = !state.toolsOpen },
+                            onUndo = { sendShortcut(KeyEvent.KEYCODE_Z) },
+                            onRedo = { sendShortcut(KeyEvent.KEYCODE_Z, shift = true) },
+                            onSelectAll = { editAction(android.R.id.selectAll) },
+                            onCut = { editAction(android.R.id.cut) },
+                            onCopy = { editAction(android.R.id.copy) },
                             onPaste = ::paste,
                             onClearClipboard = ::clearClipboard,
                             onSettings = ::openSettings,
@@ -809,6 +816,37 @@ class WeftKeyboardService :
         if (ic.performContextMenuAction(android.R.id.paste)) return
         val text = runCatching { clipboard.primaryClip?.getItemAt(0)?.coerceToText(this) }.getOrNull()
         if (!text.isNullOrEmpty()) ic.commitText(text, 1)
+    }
+
+    /**
+     * Tools row › Select all, Cut, Copy: asks the app to do it, exactly as its
+     * own text menu would. The tools stay open, since these are often used one
+     * after another (select all, then copy). Cut and copy do nothing when no
+     * text is selected.
+     */
+    private fun editAction(id: Int) {
+        val ic = currentInputConnection ?: return
+        typing.onInputStarted() // the word being typed is no longer what's at the cursor
+        ic.performContextMenuAction(id)
+    }
+
+    /**
+     * Tools row › Undo and Redo: sent as the key presses Ctrl+Z and
+     * Ctrl+Shift+Z, the way a hardware keyboard would. Android has no "undo"
+     * request that every app answers, but text fields and browsers understand
+     * these shortcuts. An app with no undo of its own simply ignores them.
+     */
+    private fun sendShortcut(keyCode: Int, shift: Boolean = false) {
+        val ic = currentInputConnection ?: return
+        typing.onInputStarted()
+        val meta = KeyEvent.META_CTRL_ON or KeyEvent.META_CTRL_LEFT_ON or
+            if (shift) KeyEvent.META_SHIFT_ON or KeyEvent.META_SHIFT_LEFT_ON else 0
+        val now = SystemClock.uptimeMillis()
+        for (action in intArrayOf(KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP)) {
+            ic.sendKeyEvent(
+                KeyEvent(now, now, action, keyCode, 0, meta, KeyCharacterMap.VIRTUAL_KEYBOARD, 0, KeyEvent.FLAG_SOFT_KEYBOARD),
+            )
+        }
     }
 
     /** Tools row › Clear clipboard. */

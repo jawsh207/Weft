@@ -15,10 +15,13 @@
     <string name="voice_input">Voice input</string>
     <string name="tools_open">Show tools</string>
     <string name="tools_close">Hide tools</string>
+    <string name="tools_undo">Undo</string>
+    <string name="tools_redo">Redo</string>
+    <string name="tools_select_all">Select all</string>
+    <string name="tools_cut">Cut</string>
+    <string name="tools_copy">Copy</string>
     <string name="tools_paste">Paste</string>
-    <string name="tools_clear_clipboard">Clear</string>
     <string name="tools_clear_clipboard_description">Clear clipboard</string>
-    <string name="tools_settings">Settings</string>
     <string name="tools_settings_description">Keyboard settings</string>
     <string name="clipboard_cleared">Clipboard cleared</string>
     <string name="suggestion_remove_prompt">Remove “%1$s” from suggestions?</string>

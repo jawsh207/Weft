@@ -1,6 +1,8 @@
 package app.weft.keyboard.ui
 
+import android.content.res.Configuration
 import android.view.inputmethod.EditorInfo
+import app.weft.keyboard.layout.KeyboardSize
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -63,6 +65,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
@@ -108,18 +111,25 @@ internal val KeyGap = 3.dp
 
 /** Space between the bottom row and the system navigation bar / IME switcher. */
 private val BottomClearance = 18.dp
-/** Rows of keys on every page (the optional number row is extra). */
-private const val KEY_ROWS = 4
-
-/** The optional number row is a little shorter than the letter rows. */
-private const val NUMBER_ROW_SCALE = 0.82f
+/** Rows of keys on every page (the optional number row is extra and a little shorter). */
+private const val KEY_ROWS = KeyboardSize.KEY_ROWS
+private const val NUMBER_ROW_SCALE = KeyboardSize.NUMBER_ROW_SCALE
 
 /** Horizontal travel on the space bar per one-character cursor step. */
 private val CursorStep = 12.dp
 
-/** The tools row that slides over the suggestions. */
+/**
+ * What the buttons in the tools row do. The row slides over the suggestions
+ * when the tools key is tapped: undo, redo, select all, cut, copy, paste,
+ * clear clipboard and settings.
+ */
 class ToolActions(
     val onToggle: () -> Unit,
+    val onUndo: () -> Unit,
+    val onRedo: () -> Unit,
+    val onSelectAll: () -> Unit,
+    val onCut: () -> Unit,
+    val onCopy: () -> Unit,
     val onPaste: () -> Unit,
     val onClearClipboard: () -> Unit,
     val onSettings: () -> Unit,
@@ -159,7 +169,16 @@ fun KeyboardScreen(
     val context = LocalContext.current
     val haptics = remember(state.haptics) { KeyHaptics(context, state.haptics) }
 
-    CompositionLocalProvider(LocalKeyHaptics provides haptics, LocalRowHeight provides state.keyHeight.row) {
+    // A phone held sideways gets shorter rows, so the keyboard doesn't cover the whole app.
+    val screen = LocalConfiguration.current
+    val rowHeight = KeyboardSize.rowHeight(
+        chosenDp = state.keyHeight.row.value,
+        screenHeightDp = screen.screenHeightDp,
+        landscape = screen.orientation == Configuration.ORIENTATION_LANDSCAPE,
+        numberRow = state.numberRow,
+    ).dp
+
+    CompositionLocalProvider(LocalKeyHaptics provides haptics, LocalRowHeight provides rowHeight) {
         KeyboardLayout(state, handlers, popup, emoji, tools, onMic, onSuggestion, onRemoveSuggestion)
     }
 }
@@ -271,7 +290,8 @@ private fun TopStrip(
             }
             ToolsOverlay(showTools && state.toolsOpen, state.clipboardHasContent, tools)
         }
-        if (state.voiceAvailable) {
+        // The open tools row takes the mic's place too: eight buttons need the room.
+        if (state.voiceAvailable && !(showTools && state.toolsOpen)) {
             val description = stringResource(R.string.voice_input)
             if (state.listening) {
                 FilledIconButton(onClick = onMic) {
@@ -322,7 +342,11 @@ private fun ToolsOverlay(visible: Boolean, hasClip: Boolean, tools: ToolActions)
     }
 }
 
-/** Paste, clear clipboard and settings, covering the suggestions. */
+/**
+ * The tools, covering the suggestions: editing (undo, redo, select all, cut,
+ * copy, paste), then clear clipboard and settings. Icons only, so eight fit
+ * on a narrow phone; each has a spoken description for screen readers.
+ */
 @Composable
 private fun ToolsRow(hasClip: Boolean, tools: ToolActions) {
     Row(
@@ -331,26 +355,24 @@ private fun ToolsRow(hasClip: Boolean, tools: ToolActions) {
             .height(48.dp)
             .background(MaterialTheme.colorScheme.surfaceContainer)
             .padding(horizontal = 2.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ToolButton(R.drawable.ic_paste, R.string.tools_paste, R.string.tools_paste, hasClip, tools.onPaste)
-        ToolButton(
-            R.drawable.ic_clipboard_clear,
-            R.string.tools_clear_clipboard,
-            R.string.tools_clear_clipboard_description,
-            hasClip,
-            tools.onClearClipboard,
-        )
-        ToolButton(R.drawable.ic_settings, R.string.tools_settings, R.string.tools_settings_description, true, tools.onSettings)
+        ToolButton(R.drawable.ic_undo, R.string.tools_undo, true, tools.onUndo)
+        ToolButton(R.drawable.ic_redo, R.string.tools_redo, true, tools.onRedo)
+        ToolButton(R.drawable.ic_select_all, R.string.tools_select_all, true, tools.onSelectAll)
+        ToolButton(R.drawable.ic_cut, R.string.tools_cut, true, tools.onCut)
+        ToolButton(R.drawable.ic_copy, R.string.tools_copy, true, tools.onCopy)
+        ToolButton(R.drawable.ic_paste, R.string.tools_paste, hasClip, tools.onPaste)
+        ToolButton(R.drawable.ic_clipboard_clear, R.string.tools_clear_clipboard_description, hasClip, tools.onClearClipboard)
+        ToolButton(R.drawable.ic_settings, R.string.tools_settings_description, true, tools.onSettings)
     }
 }
 
-/** One button in the tools row (paste, clear clipboard, settings). */
+/** One icon button in the tools row; [description] is what a screen reader says. */
 @Composable
 private fun RowScope.ToolButton(
     @DrawableRes icon: Int,
-    label: Int,
     description: Int,
     enabled: Boolean,
     onClick: () -> Unit,
@@ -359,20 +381,13 @@ private fun RowScope.ToolButton(
     FilledTonalButton(
         onClick = onClick,
         enabled = enabled,
-        contentPadding = PaddingValues(horizontal = 10.dp),
+        contentPadding = PaddingValues(0.dp),
         modifier = Modifier
             .weight(1f)
             .height(40.dp)
             .semantics { contentDescription = spoken },
     ) {
-        Icon(painterResource(icon), contentDescription = null, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(6.dp))
-        Text(
-            stringResource(label),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            style = MaterialTheme.typography.labelLarge,
-        )
+        Icon(painterResource(icon), contentDescription = null, modifier = Modifier.size(20.dp))
     }
 }
 

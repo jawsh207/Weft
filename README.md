@@ -41,7 +41,8 @@ Released and working:
 - **Keys and voice settings:** vibration strength (off, light, normal, strong),
   key height (compact, normal, tall), an optional number row, and "prefer
   offline voice", which asks your chosen speech engine to stay on the phone
-- Tools key beside the suggestions: slides out Paste, Clear clipboard and Settings
+- Tools key beside the suggestions: slides out Undo, Redo, Select all, Cut, Copy, Paste, Clear clipboard and Settings
+- In landscape on a phone, the keys shrink so the keyboard takes about half the screen
 - **Suggestions:** typo correction that knows which keys are next to each other,
   word completions, and next-word predictions that look two words back ("see
   you" → "later"), in a three-slot strip. Splits run-together words ("letgo" →
