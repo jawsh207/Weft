@@ -39,7 +39,7 @@ Released and working:
 - Setup screen: enable keyboard, switch to it, grant the mic, test field
 - Settings to turn suggestions, autocorrect, swipe typing and word learning on or off, and to clear learned words
 - **Keys and voice settings:** vibration strength (off, light, normal, strong),
-  key height (compact, normal, tall), an optional number row, and "prefer
+  key height (mini, compact, normal, tall), an optional number row, and "prefer
   offline voice", which asks your chosen speech engine to stay on the phone
 - Tools key beside the suggestions: slides out Select all, Cut, Copy, Paste, Clear clipboard and Settings
 - In landscape on a phone, the keys shrink so the keyboard takes about half the screen

@@ -73,6 +73,7 @@
     <string name="settings_haptics_normal">Normal</string>
     <string name="settings_haptics_strong">Strong</string>
     <string name="settings_key_height">Key height</string>
+    <string name="settings_key_height_mini">Mini</string>
     <string name="settings_key_height_compact">Compact</string>
     <string name="settings_key_height_normal">Normal</string>
     <string name="settings_key_height_tall">Tall</string>

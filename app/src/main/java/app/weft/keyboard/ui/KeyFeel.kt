@@ -30,16 +30,36 @@ enum class HapticLevel(val key: String) {
     }
 }
 
-/** Key row height. Stored in settings by [key]. */
+/**
+ * Key row height (Settings › Keys). Stored in settings by [key]; Normal is
+ * the default.
+ *
+ * Up to v1.0.0 there were three heights, with names one step larger than
+ * today's for the same size: "compact" was 50 dp, "normal" 58 dp and "tall"
+ * 66 dp. [of] reads a choice saved back then as the same size under its new
+ * name, so nobody's keyboard changes size because of the renaming. Someone
+ * who never chose gets today's Normal, which is one step taller than before.
+ */
 enum class KeyHeight(val key: String, val row: Dp) {
-    Compact("compact", 50.dp),
-    Normal("normal", 58.dp),
-    Tall("tall", 66.dp),
+    Mini("mini", 50.dp),
+    Compact("compact", 58.dp),
+    Normal("normal", 66.dp),
+    Tall("tall", 74.dp),
     ;
 
     companion object {
-        /** The height saved as [key]; Normal if nothing (or something unknown) is saved. */
-        fun of(key: String?) = entries.firstOrNull { it.key == key } ?: Normal
+        /**
+         * The height saved as [key]. If nothing is saved under today's names,
+         * [legacyKey] (a choice saved by v1.0.0 or earlier) is read as the same
+         * size; with neither, Normal.
+         */
+        fun of(key: String?, legacyKey: String? = null): KeyHeight =
+            entries.firstOrNull { it.key == key } ?: when (legacyKey) {
+                "compact" -> Mini
+                "normal" -> Compact
+                "tall" -> Normal
+                else -> Normal
+            }
     }
 }
 

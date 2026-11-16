@@ -457,6 +457,7 @@ internal fun KeysSection() {
             label = {
                 stringResource(
                     when (it) {
+                        KeyHeight.Mini -> R.string.settings_key_height_mini
                         KeyHeight.Compact -> R.string.settings_key_height_compact
                         KeyHeight.Normal -> R.string.settings_key_height_normal
                         KeyHeight.Tall -> R.string.settings_key_height_tall

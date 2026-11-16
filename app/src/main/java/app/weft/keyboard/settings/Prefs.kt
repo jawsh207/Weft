@@ -21,7 +21,10 @@ object Prefs {
     const val LEARNED_RESET = "learned_reset"
     /** Keys: vibration strength, key height, and a row of digits above the letters. */
     const val HAPTICS = "haptics"
-    const val KEY_HEIGHT = "key_height"
+    const val KEY_HEIGHT = "key_height_v2"
+
+    /** Where the key height was saved up to v1.0.0, under the old names (see [KeyHeight]). Only read. */
+    const val KEY_HEIGHT_LEGACY = "key_height"
     const val NUMBER_ROW = "number_row"
     /** Voice: prefer on-device recognition. */
     const val VOICE_OFFLINE = "voice_offline"
@@ -56,7 +59,8 @@ fun SharedPreferences.learnedReset() = getInt(Prefs.LEARNED_RESET, 0)
 fun SharedPreferences.haptics() = HapticLevel.of(getString(Prefs.HAPTICS, null))
 
 /** Key height (Normal by default). */
-fun SharedPreferences.keyHeight() = KeyHeight.of(getString(Prefs.KEY_HEIGHT, null))
+fun SharedPreferences.keyHeight() =
+    KeyHeight.of(getString(Prefs.KEY_HEIGHT, null), getString(Prefs.KEY_HEIGHT_LEGACY, null))
 
 /** Digits above the letters (off by default). */
 fun SharedPreferences.numberRow() = getBoolean(Prefs.NUMBER_ROW, false)
