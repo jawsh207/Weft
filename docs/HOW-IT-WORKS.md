@@ -32,7 +32,7 @@ typed, learned or logged can be sent anywhere.
 | Look at the three suggestions | `predict/Suggester.kt` finds and ranks them; `ime/TypingController.kt` arranges them in the strip |
 | Swipe across letters | `ui/SwipeArea.kt` follows the finger and draws the trail; `predict/SwipeDecoder.kt` turns the path into words |
 | Hold a key | `ui/AlternatesPopup.kt` shows accents, fractions or skin tones; the choices are listed in `layout/KeyboardLayout.kt` |
-| Use the tools row (undo, select all, cut, copy, paste…) | `ui/KeyboardScreen.kt` draws the buttons; `ime/WeftKeyboardService.kt` asks the app to do the edit |
+| Use the tools row (select all, cut, copy, paste…) | `ui/KeyboardScreen.kt` draws the buttons; `ime/WeftKeyboardService.kt` asks the app to do the edit |
 | Turn the phone sideways | `layout/KeyboardSize.kt` shrinks the rows so the keyboard takes about half the screen |
 | Open the emoji page | `ui/EmojiPicker.kt` draws it; `emoji/EmojiCatalog.kt` holds the list and searches it; `emoji/EmojiHistory.kt` remembers recents and skin tones |
 | Tap the microphone | `voice/SystemVoiceInput.kt` starts whichever speech engine the phone is set to use; `voice/VoiceText.kt` tidies what comes back (spoken punctuation, capitals) |

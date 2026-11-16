@@ -15,8 +15,6 @@
     <string name="voice_input">Voice input</string>
     <string name="tools_open">Show tools</string>
     <string name="tools_close">Hide tools</string>
-    <string name="tools_undo">Undo</string>
-    <string name="tools_redo">Redo</string>
     <string name="tools_select_all">Select all</string>
     <string name="tools_cut">Cut</string>
     <string name="tools_copy">Copy</string>

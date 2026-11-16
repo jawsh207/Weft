@@ -120,13 +120,11 @@ private val CursorStep = 12.dp
 
 /**
  * What the buttons in the tools row do. The row slides over the suggestions
- * when the tools key is tapped: undo, redo, select all, cut, copy, paste,
- * clear clipboard and settings.
+ * when the tools key is tapped: select all, cut, copy, paste, clear clipboard
+ * and settings.
  */
 class ToolActions(
     val onToggle: () -> Unit,
-    val onUndo: () -> Unit,
-    val onRedo: () -> Unit,
     val onSelectAll: () -> Unit,
     val onCut: () -> Unit,
     val onCopy: () -> Unit,
@@ -290,8 +288,7 @@ private fun TopStrip(
             }
             ToolsOverlay(showTools && state.toolsOpen, state.clipboardHasContent, tools)
         }
-        // The open tools row takes the mic's place too: eight buttons need the room.
-        if (state.voiceAvailable && !(showTools && state.toolsOpen)) {
+        if (state.voiceAvailable) {
             val description = stringResource(R.string.voice_input)
             if (state.listening) {
                 FilledIconButton(onClick = onMic) {
@@ -343,9 +340,9 @@ private fun ToolsOverlay(visible: Boolean, hasClip: Boolean, tools: ToolActions)
 }
 
 /**
- * The tools, covering the suggestions: editing (undo, redo, select all, cut,
- * copy, paste), then clear clipboard and settings. Icons only, so eight fit
- * on a narrow phone; each has a spoken description for screen readers.
+ * The tools, covering the suggestions: editing (select all, cut, copy,
+ * paste), then clear clipboard and settings. Icons only, so six fit on a
+ * narrow phone; each has a spoken description for screen readers.
  */
 @Composable
 private fun ToolsRow(hasClip: Boolean, tools: ToolActions) {
@@ -358,8 +355,6 @@ private fun ToolsRow(hasClip: Boolean, tools: ToolActions) {
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ToolButton(R.drawable.ic_undo, R.string.tools_undo, true, tools.onUndo)
-        ToolButton(R.drawable.ic_redo, R.string.tools_redo, true, tools.onRedo)
         ToolButton(R.drawable.ic_select_all, R.string.tools_select_all, true, tools.onSelectAll)
         ToolButton(R.drawable.ic_cut, R.string.tools_cut, true, tools.onCut)
         ToolButton(R.drawable.ic_copy, R.string.tools_copy, true, tools.onCopy)
