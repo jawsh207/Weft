@@ -166,6 +166,7 @@ fun KeyboardScreen(
     val handlers = KeyHandlers(onKey, onCursor, popup, onSwipe)
     val context = LocalContext.current
     val haptics = remember(state.haptics) { KeyHaptics(context, state.haptics) }
+    val sounds = remember(state.sounds) { KeySounds(context, state.sounds) }
 
     // A phone held sideways gets shorter rows, so the keyboard doesn't cover the whole app.
     val screen = LocalConfiguration.current
@@ -176,7 +177,11 @@ fun KeyboardScreen(
         numberRow = state.numberRow,
     ).dp
 
-    CompositionLocalProvider(LocalKeyHaptics provides haptics, LocalRowHeight provides rowHeight) {
+    CompositionLocalProvider(
+        LocalKeyHaptics provides haptics,
+        LocalKeySounds provides sounds,
+        LocalRowHeight provides rowHeight,
+    ) {
         KeyboardLayout(state, handlers, popup, emoji, tools, onMic, onSuggestion, onRemoveSuggestion)
     }
 }
@@ -544,6 +549,12 @@ private fun ActionKeyView(
             modifier
         },
         style = style,
+        sound = when (key.action) {
+            KeyAction.Backspace -> KeySound.Delete
+            KeyAction.Space -> KeySound.Space
+            KeyAction.Enter -> KeySound.Enter
+            else -> KeySound.Standard
+        },
         gesture = when (key.action) {
             KeyAction.Backspace -> KeyGesture.Repeat
             KeyAction.Space -> KeyGesture.Cursor
@@ -652,9 +663,10 @@ internal sealed interface KeyGesture {
 }
 
 /**
- * A key that commits on release (so a finger can slide off to cancel), gives
- * system haptics on press, and morphs shape on press using the Expressive
- * motion scheme's spatial spring.
+ * A key that commits on release (so a finger can slide off to cancel), buzzes
+ * and clicks on press (as set in Settings › Keys and feel; [sound] picks the
+ * click), and morphs shape on press using the Expressive motion scheme's
+ * spatial spring.
  */
 @Composable
 internal fun KeyButton(
@@ -662,11 +674,14 @@ internal fun KeyButton(
     style: KeyStyle,
     handlers: KeyHandlers,
     gesture: KeyGesture = KeyGesture.Tap,
+    sound: KeySound = KeySound.Standard,
     onTap: () -> Unit,
     content: @Composable (tint: Color) -> Unit,
 ) {
     val view = LocalView.current
     val haptics by rememberUpdatedState(LocalKeyHaptics.current)
+    val sounds by rememberUpdatedState(LocalKeySounds.current)
+    val currentSound by rememberUpdatedState(sound)
     val currentOnTap by rememberUpdatedState(onTap)
     val currentGesture by rememberUpdatedState(gesture)
     var pressed by remember { mutableStateOf(false) }
@@ -709,6 +724,7 @@ internal fun KeyButton(
                     val down = awaitFirstDown(requireUnconsumed = false)
                     pressed = true
                     haptics?.tap(view)
+                    sounds?.play(currentSound)
                     val g = currentGesture
                     try {
                         when (g) {
@@ -723,6 +739,7 @@ internal fun KeyButton(
                                     while (outcome == null) {
                                         currentOnTap()
                                         haptics?.tap(view)
+                                        sounds?.play(currentSound)
                                         outcome = withTimeoutOrNull(REPEAT_INTERVAL_MS) {
                                             Released(waitForUpOrCancellation() != null)
                                         }

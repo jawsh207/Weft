@@ -95,7 +95,7 @@ benchmarked on any computer.
   becomes a swipe.
 - **`AlternatesPopup.kt`** is the long-press popup.
 - **`EmojiPicker.kt`** is the emoji page.
-- **`KeyFeel.kt`** is vibration strength and key height.
+- **`KeyFeel.kt`** is vibration strength, key click sounds and key height.
 
 ### `voice/`, `emoji/`, `theme/`, `settings/`
 

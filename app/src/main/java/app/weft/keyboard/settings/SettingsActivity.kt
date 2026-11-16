@@ -83,6 +83,9 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import app.weft.keyboard.ui.HapticLevel
+import app.weft.keyboard.ui.KeySound
+import app.weft.keyboard.ui.KeySounds
+import app.weft.keyboard.ui.SoundLevel
 import app.weft.keyboard.ui.KeyHeight
 import androidx.compose.ui.semantics.Role
 import androidx.core.content.edit
@@ -429,6 +432,7 @@ internal fun KeysSection() {
     val context = LocalContext.current
     val prefs = remember { Prefs.of(context) }
     var haptics by remember { mutableStateOf(prefs.haptics()) }
+    var sounds by remember { mutableStateOf(prefs.keySounds()) }
     var height by remember { mutableStateOf(prefs.keyHeight()) }
     var numberRow by remember { mutableStateOf(prefs.numberRow()) }
     SectionCard(null) {
@@ -449,6 +453,26 @@ internal fun KeysSection() {
         ) {
             haptics = it
             prefs.edit { putString(Prefs.HAPTICS, it.key) }
+        }
+        ChoiceRow(
+            title = stringResource(R.string.settings_sounds),
+            options = SoundLevel.entries,
+            selected = sounds,
+            label = {
+                stringResource(
+                    when (it) {
+                        SoundLevel.Off -> R.string.settings_sounds_off
+                        SoundLevel.Quiet -> R.string.settings_sounds_quiet
+                        SoundLevel.Normal -> R.string.settings_sounds_normal
+                        SoundLevel.Loud -> R.string.settings_sounds_loud
+                    },
+                )
+            },
+        ) {
+            sounds = it
+            prefs.edit { putString(Prefs.KEY_SOUNDS, it.key) }
+            // Let the choice be heard straight away.
+            KeySounds(context, it).play(KeySound.Standard)
         }
         ChoiceRow(
             title = stringResource(R.string.settings_key_height),

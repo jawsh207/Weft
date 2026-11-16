@@ -10,6 +10,7 @@ import app.weft.keyboard.emoji.EmojiCatalog
 import app.weft.keyboard.layout.KeyboardPage
 import app.weft.keyboard.ui.HapticLevel
 import app.weft.keyboard.ui.KeyHeight
+import app.weft.keyboard.ui.SoundLevel
 
 /** The shift key: off, on for the next letter only, or caps lock. */
 enum class ShiftState { Off, Once, Locked }
@@ -60,6 +61,8 @@ class KeyboardState {
     // --- Look and feel (Settings) ---
     /** Vibration strength for key presses. */
     var haptics by mutableStateOf(HapticLevel.Normal)
+    /** Loudness of key clicks (off unless switched on). */
+    var sounds by mutableStateOf(SoundLevel.Off)
     /** Short, normal or tall keys. */
     var keyHeight by mutableStateOf(KeyHeight.Normal)
     /** Whether a row of digits shows above the letters. */

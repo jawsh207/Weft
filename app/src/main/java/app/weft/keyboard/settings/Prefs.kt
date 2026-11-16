@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import app.weft.keyboard.ui.HapticLevel
 import app.weft.keyboard.ui.KeyHeight
+import app.weft.keyboard.ui.SoundLevel
 
 /**
  * The names the settings are saved under, and how to read each one with its
@@ -19,8 +20,9 @@ object Prefs {
 
     /** Bumped by "Clear learned words" so the running keyboard drops its copy too. */
     const val LEARNED_RESET = "learned_reset"
-    /** Keys: vibration strength, key height, and a row of digits above the letters. */
+    /** Keys: vibration strength, click loudness, key height, and a row of digits above the letters. */
     const val HAPTICS = "haptics"
+    const val KEY_SOUNDS = "key_sounds"
     const val KEY_HEIGHT = "key_height_v2"
 
     /** Where the key height was saved up to v1.0.0, under the old names (see [KeyHeight]). Only read. */
@@ -57,6 +59,9 @@ fun SharedPreferences.learnedReset() = getInt(Prefs.LEARNED_RESET, 0)
 
 /** Vibration strength for key presses (Normal by default). */
 fun SharedPreferences.haptics() = HapticLevel.of(getString(Prefs.HAPTICS, null))
+
+/** Loudness of key clicks (Off by default). */
+fun SharedPreferences.keySounds() = SoundLevel.of(getString(Prefs.KEY_SOUNDS, null))
 
 /** Key height (Normal by default). */
 fun SharedPreferences.keyHeight() =

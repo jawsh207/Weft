@@ -51,6 +51,7 @@ import app.weft.keyboard.settings.autocorrect
 import app.weft.keyboard.settings.emojiSuggestions
 import app.weft.keyboard.settings.haptics
 import app.weft.keyboard.settings.keyHeight
+import app.weft.keyboard.settings.keySounds
 import app.weft.keyboard.settings.numberRow
 import app.weft.keyboard.settings.swipeVisuals
 import app.weft.keyboard.settings.voiceOffline
@@ -156,7 +157,8 @@ class WeftKeyboardService :
     /** Look-and-feel settings take effect at once, even if the keyboard is showing. */
     private val prefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
         when (key) {
-            Prefs.HAPTICS, Prefs.KEY_HEIGHT, Prefs.NUMBER_ROW, Prefs.SWIPE_VISUALS -> applyLookAndFeel(prefs)
+            Prefs.HAPTICS, Prefs.KEY_SOUNDS, Prefs.KEY_HEIGHT, Prefs.NUMBER_ROW, Prefs.SWIPE_VISUALS ->
+                applyLookAndFeel(prefs)
         }
     }
 
@@ -499,9 +501,10 @@ class WeftKeyboardService :
         state.swipeEnabled = swipeAllowed && swipeDecoder != null
     }
 
-    /** Copies the look-and-feel settings (vibration, key height, number row, swipe visuals) to the keys. */
+    /** Copies the look-and-feel settings (vibration, sounds, key height, number row, swipe visuals) to the keys. */
     private fun applyLookAndFeel(prefs: android.content.SharedPreferences) {
         state.haptics = prefs.haptics()
+        state.sounds = prefs.keySounds()
         state.keyHeight = prefs.keyHeight()
         state.numberRow = prefs.numberRow()
         state.swipeVisuals = prefs.swipeVisuals()
