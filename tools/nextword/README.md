@@ -14,6 +14,14 @@ In the app (`predict/NextWordModel.kt`, `predict/Suggester.kt`):
    can join, starting a little below the weakest dictionary word.
 
 The weight and that starting point are tuned here and stored in the model file.
+The model's own guesses are never names ("Tom", "Paris"; "I" and "I'm" are
+fine): Tatoeba, a large part of the training text, is full of example sentences
+about Tom and Mary, and the model picked up the habit.
+
+At the start of a sentence or phrase (an empty field, after a line break, or
+after . ! ? … , ; : and a space) the dictionary has no previous word to go on,
+so the model's guesses are the predictions there, capitalized when shift is on.
+
 The model only affects predictions when nothing has been typed yet; it doesn't
 touch corrections or autocorrect.
 
@@ -104,6 +112,8 @@ python3 tools/nextword/evaluate.py out.wlm --dump data/bench.jsonl --conversatio
 - **Distillation.** Training this small model to copy a larger one's
   predictions (SmolLM2-360M) usually beats training on text alone, but costs
   many hours of CPU time per run.
-- **Predicting at the start of a sentence or after a comma.** The model can
-  do it; the dictionary can't, so those places get no predictions today.
-  It needs its own benchmark first.
+- **Better sentence starts.** The model gets the first word of a sentence or
+  phrase right 25% of the time in the benchmark sentences but only 13% in the
+  conversations (it expects "I", "the", "he"; people chatting start with
+  "Thank", "How", "Okay"). Counting the conversation text more in training
+  would help here.

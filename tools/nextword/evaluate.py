@@ -46,7 +46,7 @@ def score_rows(m, rows, dict_words):
             if looked > common.TOP_GUESSES:
                 break
             w = m.words[i]
-            if w in dict_words:
+            if w in dict_words and not common.is_name(dict_words[w]):
                 guesses.append((dict_words[w], float(lp[i])))
             if len(guesses) >= common.MAX_GUESSES:
                 break

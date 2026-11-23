@@ -18,6 +18,14 @@ TOP_GUESSES = 40
 MAX_GUESSES = 20
 
 
+CAPITAL_I = re.compile(r"I(?:['’](?:m|ll|ve|d))?")
+
+
+def is_name(word):
+    """Only ever written with a capital ("Tom"), apart from "I", "I'm" etc.: never a model guess (Suggester.isName)."""
+    return word[:1].isupper() and not CAPITAL_I.fullmatch(word)
+
+
 def words(text):
     """Lowercased words of [text], with curly apostrophes made straight."""
     return [w.replace("’", "'").lower() for w in WORD.findall(text)]
@@ -44,13 +52,16 @@ def load_dump(path, every=1):
 
 
 def load_words(path):
-    """The dictionary's suggestible words: lowercase → how it is written."""
-    out = {}
+    """
+    The dictionary's suggestible words: lowercase → how it is written, its commonest spelling
+    when there are several ("Tom" over "tom"), as BinaryDictionary.findIgnoreCase picks.
+    """
+    out, best = {}, {}
     for line in open(path, encoding="utf-8"):
-        w, _ = line.rstrip("\n").split("\t")
-        k = w.lower()
-        if k not in out or w == k:
-            out[k] = w
+        w, f = line.rstrip("\n").split("\t")
+        k, f = w.lower(), int(f)
+        if k not in out or f > best[k]:
+            out[k], best[k] = w, f
     return out
 
 
