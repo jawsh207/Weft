@@ -743,6 +743,21 @@ def u16(values) -> bytes:
 def write_dictionary(path: Path, words: dict[str, tuple[int, int]],
                      bigrams: dict[str, list[tuple[str, int]]], meta: dict,
                      trigrams: dict[tuple[str, str], list[tuple[str, int]]] | None = None) -> int:
+    """Writes an .ekd file (gzipped for .gz/.ekdz paths); returns the node count."""
+    data, n = encode_dictionary(words, bigrams, meta, trigrams)
+    if path.suffix in (".gz", ".ekdz"):
+        # mtime=0 and no file name keep the output byte-identical between builds.
+        with open(path, "wb") as raw, gzip.GzipFile(fileobj=raw, mode="wb", compresslevel=9, mtime=0, filename="") as gz:
+            gz.write(data)
+    else:
+        path.write_bytes(data)
+    return n
+
+
+def encode_dictionary(words: dict[str, tuple[int, int]],
+                      bigrams: dict[str, list[tuple[str, int]]], meta: dict,
+                      trigrams: dict[tuple[str, str], list[tuple[str, int]]] | None = None) -> tuple[bytes, int]:
+    """The .ekd bytes for a dictionary, and its node count."""
     root = Node(0)
     for word in sorted(words):
         node = root
@@ -842,13 +857,7 @@ def write_dictionary(path: Path, words: dict[str, tuple[int, int]],
         for part in (freq, bytes(max_sub), flags, bytes(bigram_freq), bytes(tri_freq)):
             section(part)
         data = f.getvalue()
-    if path.suffix in (".gz", ".ekdz"):
-        # mtime=0 and no file name keep the output byte-identical between builds.
-        with open(path, "wb") as raw, gzip.GzipFile(fileobj=raw, mode="wb", compresslevel=9, mtime=0, filename="") as gz:
-            gz.write(data)
-    else:
-        path.write_bytes(data)
-    return n
+    return data, n
 
 
 # ---------------------------------------------------------------------------

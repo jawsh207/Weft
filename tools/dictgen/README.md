@@ -10,11 +10,17 @@ python3 tools/dictgen/make_dict.py en_US
 ```
 
 This downloads the sources in `sources/en_US.json` into `cache/en_US/`
-(git-ignored), builds `app/src/main/assets/dictionaries/main_en_US.ekdz` plus
-the UK, Canadian and Australian variants (`main_en_GB.ekdz`, …), and prints a
-summary. `.ekdz` is a gzipped `.ekd`; the app unpacks each once, on first use.
-(Not `.ekd.gz`: Android's build tools unpack `.gz` assets, which undoes the
-saving.) Rebuild the app afterwards. The Dictionary workflow does all of this on
+(git-ignored), builds the US dictionary plus the UK, Canadian and Australian
+variants, and prints a summary. `.ekdz` is a gzipped `.ekd`. (Not `.ekd.gz`:
+Android's build tools unpack `.gz` assets, which undoes the saving.)
+
+The variants are the US dictionary re-spelled, so they share almost everything.
+`share_dicts.py` (run automatically at the end) turns the four into one shared
+`app/src/main/assets/dictionaries/main_en.ekdz` and a small patch per country
+(`patch_en_GB.ekdp`, …, a few tens of kB each), about 9 MB less than four full
+copies. It checks that each rebuilt dictionary matches the original exactly.
+On the phone, the first time a country's dictionary is used it's rebuilt from
+the base and its patch (`predict/DictionaryPatch.kt`) and saved. Rebuild the app afterwards. The Dictionary workflow does all of this on
 GitHub and commits the results.
 
 Extra options are passed through to the builder, for example:

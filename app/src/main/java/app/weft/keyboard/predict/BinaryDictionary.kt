@@ -247,7 +247,11 @@ class BinaryDictionary(buffer: ByteBuffer) {
         return best
     }
 
-    /** Next-word predictions after the word at [node]: (word node, strength 1..255). */
+    /**
+     * Next-word predictions after the word at [node]: (word node, strength 1..255). Entries of
+     * strength 0 are skipped: the shared English dictionary keeps every country's word pairs, and 0
+     * marks one this country doesn't have (see DictionaryPatch).
+     */
     fun bigrams(node: Int): List<Pair<Int, Int>> {
         var lo = 0
         var hi = bigramWordCount - 1
@@ -260,8 +264,9 @@ class BinaryDictionary(buffer: ByteBuffer) {
                 else -> {
                     val from = bigramStart.get(mid)
                     val to = bigramStart.get(mid + 1)
-                    return (from until to).map {
-                        bigramNext.get(it) to (bigramFreqs.get(it).toInt() and 0xFF)
+                    return (from until to).mapNotNull {
+                        val strength = bigramFreqs.get(it).toInt() and 0xFF
+                        if (strength == 0) null else bigramNext.get(it) to strength
                     }
                 }
             }
@@ -284,7 +289,11 @@ class BinaryDictionary(buffer: ByteBuffer) {
         if (context < 0) return emptyList()
         val from = trigramStart.get(context)
         val to = trigramStart.get(context + 1)
-        return (from until to).map { trigramNext.get(it) to (trigramFreqs.get(it).toInt() and 0xFF) }
+        // Strength 0: a triple this country doesn't have (as in [bigrams]).
+        return (from until to).mapNotNull {
+            val strength = trigramFreqs.get(it).toInt() and 0xFF
+            if (strength == 0) null else trigramNext.get(it) to strength
+        }
     }
 
     /** Version 3: find the first word's group, then the second word inside it. */

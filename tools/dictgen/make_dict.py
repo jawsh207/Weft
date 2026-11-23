@@ -2,7 +2,8 @@
 """
 One-step dictionary build: download the sources listed in sources/<locale>.json
 into cache/<locale>/, then run build_dict.py and write the result into the app's
-assets.
+assets. For English, share_dicts.py then folds the four country dictionaries
+into one shared dictionary and a small patch per country.
 
     python3 tools/dictgen/make_dict.py en_US
 
@@ -128,6 +129,9 @@ def main() -> None:
 
     print("Running:", " ".join(cmd))
     subprocess.run(cmd, check=True)
+    if variants:
+        # One shared English dictionary plus a small patch per country (see share_dicts.py).
+        subprocess.run([sys.executable, str(HERE / "share_dicts.py"), str(ASSETS)], check=True)
 
 
 if __name__ == "__main__":

@@ -54,7 +54,8 @@ typed, learned or logged can be sent anywhere.
   (which page, shift, the suggestions…). Changing one redraws what uses it.
 - **`FieldPolicy.kt`** decides, for each text field, what prediction may do.
 - **`DictionaryLoader.kt`** finds the word list and the next-word model in the
-  app and opens them.
+  app and opens them, rebuilding a country's English dictionary from the
+  shared one the first time it's used.
 - **`LearnedStore.kt`** makes sure the keyboard and the settings screen use
   the same copy of what was learned.
 - **`KeyboardLog.kt`** keeps the troubleshooting log (Settings › About): when
@@ -67,6 +68,8 @@ benchmarked on any computer.
 
 - **`BinaryDictionary.kt`** reads the dictionary file: about 150,000 words,
   how common each is, and which words tend to follow which.
+- **`DictionaryPatch.kt`** turns the shared English dictionary into the UK,
+  Canadian, Australian or US one, using that country's small patch.
 - **`Suggester.kt`** finds dictionary words close to what was typed and ranks
   them. This is where suggestions, autocorrect and next-word predictions come
   from.
@@ -123,7 +126,8 @@ benchmarked on any computer.
 The dictionary, next-word model and emoji list are not written by hand.
 Scripts build them from open data, and the results are stored in the app:
 
-- **`tools/dictgen/`** builds the dictionaries (`app/src/main/assets/dictionaries/`).
+- **`tools/dictgen/`** builds the dictionaries (`app/src/main/assets/dictionaries/`):
+  one shared English dictionary and a small patch per country.
   Its [README](../tools/dictgen/README.md) lists every source and its license.
 - **`tools/nextword/`** trains the next-word model (`app/src/main/assets/models/`)
   on the same open sentences plus Google's Taskmaster conversations, and
