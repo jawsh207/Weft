@@ -10,6 +10,10 @@ Makes, in OUT_DIR:
   conversation.txt  Google's Taskmaster dialogs (CC BY 4.0): people ordering,
                     booking and chatting with an assistant, typed or spoken.
                     TM-3 (movie tickets) is cut to a quarter so tickets don't take over.
+  chat.txt          OpenAssistant OASST2 (Apache-2.0): the English messages
+                    people typed to the chatbot (not its replies, which
+                    volunteers wrote as polished answers), leaving out
+                    deleted, rejected and generated ones, code and links.
 
 One sentence per line. Downloads are kept in tools/dictgen/cache like the
 dictionary build's.
@@ -20,6 +24,7 @@ writes the held-out conversation sentences (Taskmaster-2's sports and music
 dialogs, never trained on) for the benchmark: tools/bench/data/conversation_en.txt.
 """
 import argparse
+import gzip
 import json
 import re
 import sys
@@ -40,6 +45,7 @@ TRAIN_FILES = (
 )
 TEST_FILES = ["TM-2-2020/data/sports.json", "TM-2-2020/data/music.json"]
 SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+OASST = "https://huggingface.co/datasets/OpenAssistant/oasst2/resolve/main/2023-11-05_oasst2_all.messages.jsonl.gz"
 
 
 def fetch_taskmaster(name, cache):
@@ -61,6 +67,29 @@ def dialog_sentences(path):
             for s in SENTENCE_END.split(u.get("text", "").replace("\n", " ").strip()):
                 if len(s.split()) >= 2:
                     yield s
+
+
+def chat_sentences(cache):
+    """Sentences from the English OpenAssistant messages people typed (see the docstring)."""
+    path = cache / "oasst2_all.messages.jsonl.gz"
+    if not path.exists():
+        print("downloading OASST2 messages", flush=True)
+        tmp = path.with_suffix(".part")
+        urllib.request.urlretrieve(OASST, tmp)
+        tmp.rename(path)
+    with gzip.open(path, "rt", encoding="utf-8") as f:
+        for line in f:
+            m = json.loads(line)
+            if (m.get("lang") != "en" or m.get("role") != "prompter" or m.get("deleted")
+                    or m.get("review_result") is False or m.get("synthetic")):
+                continue
+            text = m.get("text", "")
+            if "```" in text or "http" in text or "    " in text:
+                continue
+            for para in text.splitlines():
+                for s in SENTENCE_END.split(para.strip()):
+                    if 2 <= len(s.split()) <= 40:
+                        yield s
 
 
 def main() -> None:
@@ -110,6 +139,8 @@ def main() -> None:
             put(f, "leipzig", bd.leipzig_sentences(paths["leipzig"]), a.news)
     with open(out / "conversation.txt", "w", encoding="utf-8") as f:
         put(f, "taskmaster", (s for name in TRAIN_FILES for s in dialog_sentences(fetch_taskmaster(name, cache))))
+    with open(out / "chat.txt", "w", encoding="utf-8") as f:
+        put(f, "oasst2", chat_sentences(cache))
     print("Training sentences:", counts)
 
 

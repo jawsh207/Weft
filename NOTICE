@@ -30,6 +30,8 @@ on the Tatoeba, Common Voice and Leipzig sentences above and on:
 
 - Google Taskmaster-1 to -4 dialogs. CC BY 4.0. Copyright Google LLC.
   https://github.com/google-research-datasets/Taskmaster
+- OpenAssistant OASST2 messages (some training runs). Apache-2.0.
+  https://huggingface.co/datasets/OpenAssistant/oasst2
 
 The text it was trained on is also shown under Settings > About.
 

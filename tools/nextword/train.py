@@ -6,13 +6,17 @@ Trains Weft's next-word model and measures it as the keyboard will run it
     python3 tools/nextword/train.py VARIANT DATA_DIR OUT.wlm RESULT.json \\
         --dump bench.jsonl --conversation-dump conversation.jsonl [--minutes 240]
 
-VARIANT picks the training text from prepare.py's DATA_DIR:
-  general        general.txt only
-  conversation   general.txt + conversation.txt (Taskmaster dialogs)
+VARIANT (see VARIANTS below) picks the training text from prepare.py's
+DATA_DIR, how many passes to make and how fast the learning rate falls:
+  general        general.txt only, 5 passes
+  conversation   + conversation.txt (Taskmaster dialogs), 5 passes (v1.3.0)
+  long           the same text, 9 passes, gentler learning-rate fall
+  chat-long      + chat.txt (OpenAssistant messages), 9 passes
+  chat-long-x2   the same, conversation and chat counted twice, 7 passes
 
 The model: 30,000-word vocabulary, 128-wide word vectors, one 256-wide LSTM
 layer and an adaptive softmax (about 5.6 million weights, 6 MB as int8). It is
-trained for up to EPOCHS passes with dropout and a falling learning rate,
+trained for up to the variant's passes with dropout and a falling learning rate,
 keeping whichever pass did best on sentences set aside from training.
 
 Afterwards it is written as a .wlm file (int8, see wlm.py), read back with the
@@ -45,13 +49,36 @@ import wlm  # noqa: E402
 VOCAB, EMB, HID = 30_000, 128, 256
 CUTOFFS = [2000, 10000]
 SEQ, BATCH = 32, 64
-EPOCHS = 5
 DROPOUT = 0.1
-SOURCES = {
-    "general": "Tatoeba (CC BY 2.0 FR), Common Voice (CC0), Leipzig Corpora Collection news (CC BY 4.0)",
+GENERAL = "Tatoeba (CC BY 2.0 FR), Common Voice (CC0), Leipzig Corpora Collection news (CC BY 4.0)"
+TASKMASTER = ", Google Taskmaster dialogs (CC BY 4.0)"
+OASST = ", OpenAssistant OASST2 messages (Apache-2.0)"
+
+
+class Variant:
+    """
+    One way of training: which of prepare.py's files to read and how many times each
+    counts ([files], name → repeats), how many passes, and how fast the learning rate
+    falls after the first pass (multiplied by [decay] each pass).
+    """
+
+    def __init__(self, files, epochs, decay, sources):
+        self.files, self.epochs, self.decay, self.sources = files, epochs, decay, sources
+
+
+VARIANTS = {
+    "general": Variant({"general.txt": 1}, 5, 0.5, GENERAL),
+    # Shipped in v1.3.0.
+    "conversation": Variant({"general.txt": 1, "conversation.txt": 1}, 5, 0.5, GENERAL + TASKMASTER),
+    # The same text, longer and with a gentler learning-rate fall.
+    "long": Variant({"general.txt": 1, "conversation.txt": 1}, 9, 0.7, GENERAL + TASKMASTER),
+    # Plus the messages people typed to OpenAssistant.
+    "chat-long": Variant({"general.txt": 1, "conversation.txt": 1, "chat.txt": 1}, 9, 0.7,
+                         GENERAL + TASKMASTER + OASST),
+    # Conversation and chat counted twice, so they weigh as much as the general text.
+    "chat-long-x2": Variant({"general.txt": 1, "conversation.txt": 2, "chat.txt": 2}, 7, 0.7,
+                            GENERAL + TASKMASTER + OASST),
 }
-SOURCES["conversation"] = SOURCES["general"] + ", Google Taskmaster dialogs (CC BY 4.0)"
-FILES = {"general": ["general.txt"], "conversation": ["general.txt", "conversation.txt"]}
 
 
 class WordLSTM(nn.Module):
@@ -73,11 +100,20 @@ class WordLSTM(nn.Module):
         return self.out(h.reshape(-1, HID), y.reshape(-1)).loss
 
 
-def read_lines(data_dir, variant):
-    lines = []
-    for name in FILES[variant]:
-        lines.extend(l for l in open(Path(data_dir) / name, encoding="utf-8") if l.strip())
-    return lines
+def read_lines(data_dir, variant, rng):
+    """
+    (training lines, validation lines). Validation takes 0.5% of each file's distinct lines
+    before any repeats, so repeated lines never count as unseen.
+    """
+    train_lines, val_lines = [], []
+    for name, repeats in VARIANTS[variant].files.items():
+        lines = [l for l in open(Path(data_dir) / name, encoding="utf-8") if l.strip()]
+        rng.shuffle(lines)
+        n_val = max(200, len(lines) // 200)
+        val_lines += lines[:n_val]
+        train_lines += lines[n_val:] * repeats
+    rng.shuffle(train_lines)
+    return train_lines, val_lines
 
 
 def to_ids(lines, stoi):
@@ -110,12 +146,12 @@ def val_loss(model, data):
     return total / max(n, 1)
 
 
-def train(model, data, val, minutes, log):
+def train(model, data, val, minutes, variant, log):
     opt = torch.optim.Adam(model.parameters(), lr=2e-3)
     deadline = time.time() + minutes * 60
     best, best_state, seen, history = float("inf"), None, 0, []
-    for epoch in range(EPOCHS):
-        lr = 2e-3 * (0.5 ** max(0, epoch - 1))
+    for epoch in range(variant.epochs):
+        lr = 2e-3 * (variant.decay ** max(0, epoch - 1))
         for g in opt.param_groups:
             g["lr"] = lr
         for step, (x, y) in enumerate(batches(data, True)):
@@ -152,7 +188,7 @@ def export(model, itos, path, sources):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("variant", choices=FILES)
+    p.add_argument("variant", choices=VARIANTS)
     p.add_argument("data")
     p.add_argument("out")
     p.add_argument("result")
@@ -165,10 +201,7 @@ def main():
     torch.set_num_threads(os.cpu_count() or 4)
     log = lambda msg: print(f"[{a.variant}] {msg}", flush=True)  # noqa: E731
 
-    lines = read_lines(a.data, a.variant)
-    random.shuffle(lines)
-    n_val = max(1000, len(lines) // 200)
-    val_lines, train_lines = lines[:n_val], lines[n_val:]
+    train_lines, val_lines = read_lines(a.data, a.variant, random.Random(1))
     counts = collections.Counter(w for l in train_lines for w in common.words(l))
     itos = ["<s>", "<unk>"] + [w for w, _ in counts.most_common(VOCAB - 2)]
     stoi = {w: i for i, w in enumerate(itos)}
@@ -178,10 +211,10 @@ def main():
     model = WordLSTM(len(itos))
     params = sum(t.numel() for t in model.parameters())
     t0 = time.time()
-    seen, best, history = train(model, data, val, a.minutes, log)
+    seen, best, history = train(model, data, val, a.minutes, VARIANTS[a.variant], log)
     minutes = (time.time() - t0) / 60
     model.eval()
-    export(model, itos, a.out, SOURCES[a.variant])
+    export(model, itos, a.out, VARIANTS[a.variant].sources)
 
     # Score exactly what ships: the int8 file through the NumPy twin of NextWordModel.kt.
     m = wlm.Model(a.out)
@@ -202,7 +235,7 @@ def main():
         "tokens_seen_m": round(seen / 1e6, 1),
         "train_minutes": round(minutes),
         "int8_max_diff": round(quant_diff, 4),
-        "sources": SOURCES[a.variant],
+        "sources": VARIANTS[a.variant].sources,
     })
     json.dump(result, open(a.result, "w"), indent=1)
     log(json.dumps(result))

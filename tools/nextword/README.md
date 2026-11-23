@@ -39,6 +39,7 @@ slow on a phone.
 | Mozilla Common Voice sentences | CC0 | short, spoken-style |
 | Leipzig news, 300,000 sentences | CC BY 4.0 | breadth |
 | Google Taskmaster-1 to -4 dialogs | CC BY 4.0 | real back-and-forth conversation, typed and spoken |
+| OpenAssistant OASST2: English messages people typed to the chatbot (not its replies), without code or links | Apache-2.0 | informal typed requests and questions (only in the `chat-` variants) |
 
 Taskmaster is people ordering food and coffee, booking tables, flights and
 hotels, and asking about films, music and sports. Its movie-ticket part (TM-3)
@@ -57,16 +58,18 @@ when this folder changes on main, or by hand:
 2. `NextWordDumpTest` writes the dictionary's 30 candidates for every position
    of the typing benchmark (`tools/bench/data/sentences_en.txt`) and of the
    conversation test (`conversation_en.txt`).
-3. `train.py` trains two variants in parallel: `general` (without Taskmaster)
-   and `conversation` (with it). Each trains for up to five passes with a
-   little dropout and a halving learning rate, keeping whichever pass did best
-   on sentences set aside from training.
+3. `train.py` trains the variants in the workflow's matrix in parallel (the
+   list is `VARIANTS` in train.py: which text, how many passes, how fast the
+   learning rate falls). Each uses a little dropout and keeps whichever pass
+   did best on sentences set aside from training.
 4. Each is written as the int8 file and scored by `evaluate.py` through
    `wlm.py`, a NumPy copy of the app's arithmetic, so the numbers are what the
    keyboard gets. The weight and offset are tuned on half of each test set's
    sentences; the other half is reported.
-5. `choose.py` ships the variant with the better average top-3 over both
-   tests, and writes [RESULTS.md](RESULTS.md).
+5. `evaluate.py` measures the model already in the app the same way, and
+   `choose.py` ships whichever is best on average top-3 over both tests (the
+   current one wins ties, so a run never makes things worse), and writes
+   [RESULTS.md](RESULTS.md).
 
 The typing benchmark in the Build workflow then reports next-word accuracy with
 the model and with the dictionary alone, on both test sets.
@@ -89,12 +92,12 @@ python3 tools/nextword/evaluate.py out.wlm --dump data/bench.jsonl --conversatio
 
 ## Ideas not done yet
 
-- **More conversational text.** Taskmaster is task-focused (ordering, booking).
-  Casual chat between friends is the gap. Openly licensed options are rare:
-  most chat corpora (DailyDialog, EmpatheticDialogues, Topical-Chat) are
-  non-commercial or share-alike, which Weft can't ship. Candidates to check:
-  MultiWOZ (Apache-2.0, more task dialogs) and OpenAssistant OASST1/2
-  (Apache-2.0, messages people typed to a chatbot).
+- **More conversational text.** Taskmaster is task-focused (ordering, booking)
+  and OpenAssistant is people asking a chatbot things. Casual chat between
+  friends is the gap. Openly licensed options are rare: most chat corpora
+  (DailyDialog, EmpatheticDialogues, Topical-Chat) are non-commercial or
+  share-alike, which Weft can't ship. MultiWOZ (Apache-2.0) adds more task
+  dialogs.
 - **Generated text.** Casual messages written by an openly licensed language
   model (Apache-2.0 weights) would have no licensing problem, but small models
   repeat themselves; it would need careful filtering and its own test.

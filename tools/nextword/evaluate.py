@@ -77,9 +77,10 @@ def main():
     p.add_argument("model")
     p.add_argument("--dump", required=True)
     p.add_argument("--conversation-dump", required=True)
+    p.add_argument("--variant", default="model", help="name to record in the output (choose.py reads it)")
     a = p.parse_args()
     weight, offset, sets = measure(a.model, a.dump, a.conversation_dump)
-    print(json.dumps({"weight": weight, "offset": offset, **sets}, indent=1))
+    print(json.dumps({"variant": a.variant, "weight": weight, "offset": offset, **sets}, indent=1))
 
 
 if __name__ == "__main__":

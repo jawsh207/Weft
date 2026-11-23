@@ -1,12 +1,13 @@
 name: Next-word model
 
-# Trains the next-word model (tools/nextword, see its README): two variants on
-# different training text, each measured as the keyboard will run it. The
-# better one is committed as app/src/main/assets/models/next_en.wlmz with
-# tools/nextword/RESULTS.md, and Build then runs on that commit.
+# Trains the next-word model (tools/nextword, see its README): several variants
+# (the matrix below, defined in train.py), each measured as the keyboard will
+# run it, alongside the model already in the app. If one does better it is
+# committed as app/src/main/assets/models/next_en.wlmz; RESULTS.md is updated
+# either way, and Build then runs on that commit.
 #
 # Runs when tools/nextword changes on main, or from the Actions tab. Training
-# takes two to four hours.
+# takes up to five hours.
 
 on:
   push:
@@ -45,7 +46,7 @@ jobs:
       - name: Training text
         run: |
           python3 tools/nextword/prepare.py data --news 300000
-          wc -l data/*.txt
+          echo "::notice title=Training text (lines)::$(wc -l data/*.txt | tr '\n' ' ')"
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -70,11 +71,11 @@ jobs:
   train:
     needs: prepare
     runs-on: ubuntu-latest
-    timeout-minutes: 330
+    timeout-minutes: 355
     strategy:
       fail-fast: false
       matrix:
-        variant: [general, conversation]
+        variant: [long, chat-long, chat-long-x2]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v5
@@ -91,7 +92,7 @@ jobs:
           mkdir -p out
           python3 tools/nextword/train.py ${{ matrix.variant }} data out/${{ matrix.variant }}.wlm \
             out/${{ matrix.variant }}.json --dump data/bench.jsonl \
-            --conversation-dump data/conversation.jsonl --minutes 240
+            --conversation-dump data/conversation.jsonl --minutes 300
       - name: Show result
         if: always()
         run: |
@@ -116,7 +117,20 @@ jobs:
           pattern: model-*
           merge-multiple: true
           path: out
-      - name: Pick the better model
+      - uses: actions/download-artifact@v4
+        with:
+          name: nextword-data
+          path: data
+      - name: Measure the model already in the app
+        run: |
+          pip install -q numpy
+          if [ -f app/src/main/assets/models/next_en.wlmz ]; then
+            gunzip -c app/src/main/assets/models/next_en.wlmz > current.wlm
+            python3 tools/nextword/evaluate.py current.wlm --dump data/bench.jsonl \
+              --conversation-dump data/conversation.jsonl --variant current > out/current.json
+            cat out/current.json
+          fi
+      - name: Pick the best model
         run: python3 tools/nextword/choose.py out
       - name: Commit
         run: |
