@@ -11,8 +11,6 @@ DATA_DIR, how many passes to make and how fast the learning rate falls:
   general        general.txt only, 5 passes
   conversation   + conversation.txt (Taskmaster dialogs), 5 passes (v1.3.0)
   long           the same text, 9 passes, gentler learning-rate fall
-  chat-long      + chat.txt (OpenAssistant messages), 9 passes
-  chat-long-x2   the same, conversation and chat counted twice, 7 passes
 
 The model: 30,000-word vocabulary, 128-wide word vectors, one 256-wide LSTM
 layer and an adaptive softmax (about 5.6 million weights, 6 MB as int8). It is
@@ -52,7 +50,6 @@ SEQ, BATCH = 32, 64
 DROPOUT = 0.1
 GENERAL = "Tatoeba (CC BY 2.0 FR), Common Voice (CC0), Leipzig Corpora Collection news (CC BY 4.0)"
 TASKMASTER = ", Google Taskmaster dialogs (CC BY 4.0)"
-OASST = ", OpenAssistant OASST2 messages (Apache-2.0)"
 
 
 class Variant:
@@ -70,14 +67,9 @@ VARIANTS = {
     "general": Variant({"general.txt": 1}, 5, 0.5, GENERAL),
     # Shipped in v1.3.0.
     "conversation": Variant({"general.txt": 1, "conversation.txt": 1}, 5, 0.5, GENERAL + TASKMASTER),
-    # The same text, longer and with a gentler learning-rate fall.
+    # The same text, longer and with a gentler learning-rate fall: shipped after v1.3.0.
+    # (Adding OpenAssistant's messages, or counting the conversation text twice, did no better.)
     "long": Variant({"general.txt": 1, "conversation.txt": 1}, 9, 0.7, GENERAL + TASKMASTER),
-    # Plus the messages people typed to OpenAssistant.
-    "chat-long": Variant({"general.txt": 1, "conversation.txt": 1, "chat.txt": 1}, 9, 0.7,
-                         GENERAL + TASKMASTER + OASST),
-    # Conversation and chat counted twice, so they weigh as much as the general text.
-    "chat-long-x2": Variant({"general.txt": 1, "conversation.txt": 2, "chat.txt": 2}, 7, 0.7,
-                            GENERAL + TASKMASTER + OASST),
 }
 
 

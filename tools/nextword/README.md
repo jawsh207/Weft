@@ -39,7 +39,6 @@ slow on a phone.
 | Mozilla Common Voice sentences | CC0 | short, spoken-style |
 | Leipzig news, 300,000 sentences | CC BY 4.0 | breadth |
 | Google Taskmaster-1 to -4 dialogs | CC BY 4.0 | real back-and-forth conversation, typed and spoken |
-| OpenAssistant OASST2: English messages people typed to the chatbot (not its replies), without code or links | Apache-2.0 | informal typed requests and questions (only in the `chat-` variants) |
 
 Taskmaster is people ordering food and coffee, booking tables, flights and
 hotels, and asking about films, music and sports. Its movie-ticket part (TM-3)
@@ -92,9 +91,10 @@ python3 tools/nextword/evaluate.py out.wlm --dump data/bench.jsonl --conversatio
 
 ## Ideas not done yet
 
-- **More conversational text.** Taskmaster is task-focused (ordering, booking)
-  and OpenAssistant is people asking a chatbot things. Casual chat between
-  friends is the gap. Openly licensed options are rare: most chat corpora
+- **More conversational text.** Taskmaster is task-focused (ordering, booking).
+  Casual chat between friends is the gap. OpenAssistant's messages (people
+  typing to a chatbot, Apache-2.0) were tried and didn't help: too few, and
+  not how people text each other. Openly licensed options are rare: most chat corpora
   (DailyDialog, EmpatheticDialogues, Topical-Chat) are non-commercial or
   share-alike, which Weft can't ship. MultiWOZ (Apache-2.0) adds more task
   dialogs.

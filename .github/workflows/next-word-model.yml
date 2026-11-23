@@ -75,7 +75,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [long, chat-long, chat-long-x2]
+        variant: [long]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v5
