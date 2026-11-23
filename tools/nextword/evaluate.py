@@ -55,20 +55,32 @@ def score_rows(m, rows, dict_words):
 
 
 def measure(model_path, dump, conversation_dump):
-    """(weight, offset, {set name: test results}) for the model at [model_path]."""
+    """
+    (weight, offset, results) for the model at [model_path]. For each test set, results hold
+    the mid-sentence positions (e.g. "sentences"), the first words of sentences and phrases
+    ("sentences_start", where only the model predicts) and every word together ("sentences_all").
+    The weight and offset are tuned on mid-sentence positions: at a start there is nothing to mix.
+    """
     m = wlm.Model(model_path)
     dict_words = common.load_words(dump + ".words.tsv")
     sets = {}
     for name, path, every in (("sentences", dump, 3), ("conversation", conversation_dump, 1)):
         rows = common.load_dump(path, every)
         sets[name] = (rows, score_rows(m, rows, dict_words))
-    weight, offset = common.tune(list(sets.values()))
+
+    def part(rows, scored, keep):
+        kept = [(r, s) for r, s in zip(rows, scored) if keep(r)]
+        return [r for r, _ in kept], [s for _, s in kept]
+    mid = lambda r: not r.get("start")  # noqa: E731
+    weight, offset = common.tune([part(rows, scored, mid) for rows, scored in sets.values()])
     out = {}
     for name, (rows, scored) in sets.items():
-        b1, b3, n = common.hits(rows, [([0.0] * len(r["cands"]), []) for r in rows], 0, 0, False)
-        t1, t3, _ = common.hits(rows, scored, weight, offset, False)
-        out[name] = {"top1": round(t1, 1), "top3": round(t3, 1),
-                     "dictionary_top1": round(b1, 1), "dictionary_top3": round(b3, 1), "positions": n}
+        for suffix, keep in (("", mid), ("_start", lambda r: bool(r.get("start"))), ("_all", lambda r: True)):
+            rs, ss = part(rows, scored, keep)
+            b1, b3, n = common.hits(rs, [([0.0] * len(r["cands"]), []) for r in rs], 0, 0, False)
+            t1, t3, _ = common.hits(rs, ss, weight, offset, False)
+            out[name + suffix] = {"top1": round(t1, 1), "top3": round(t3, 1),
+                                  "dictionary_top1": round(b1, 1), "dictionary_top3": round(b3, 1), "positions": n}
     return weight, offset, out
 
 

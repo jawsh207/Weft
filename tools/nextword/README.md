@@ -43,7 +43,7 @@ slow on a phone.
 
 | Text | License | Why |
 |---|---|---|
-| Tatoeba sentences (minus the benchmark's held-out ones) | CC BY 2.0 FR | everyday sentences |
+| Tatoeba sentences (minus the benchmark's held-out ones; its endless "Tom" and "Mary" swapped for a spread of first names) | CC BY 2.0 FR | everyday sentences |
 | Mozilla Common Voice sentences | CC0 | short, spoken-style |
 | Leipzig news, 300,000 sentences | CC BY 4.0 | breadth |
 | Google Taskmaster-1 to -4 dialogs | CC BY 4.0 | real back-and-forth conversation, typed and spoken |
@@ -74,8 +74,9 @@ when this folder changes on main, or by hand:
    keyboard gets. The weight and offset are tuned on half of each test set's
    sentences; the other half is reported.
 5. `evaluate.py` measures the model already in the app the same way, and
-   `choose.py` ships whichever is best on average top-3 over both tests (the
-   current one wins ties, so a run never makes things worse), and writes
+   `choose.py` ships whichever has the best top-3 over every word (mid-sentence
+   and sentence starts together), averaged over both tests. The current one
+   wins ties, so a run never makes things worse. It writes
    [RESULTS.md](RESULTS.md).
 
 The typing benchmark in the Build workflow then reports next-word accuracy with

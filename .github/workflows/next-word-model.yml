@@ -75,7 +75,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [long]
+        variant: [long, conv2, conv3]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v5

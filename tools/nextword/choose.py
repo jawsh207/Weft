@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Picks which next-word model ships (see README.md): the one whose next-word
-top-3 is best on average over the benchmark sentences and the held-out
-conversations. Gzips it into the app's assets and writes RESULTS.md.
+Picks which next-word model ships (see README.md): the one whose top-3 over
+every word (mid-sentence and the first word of each sentence or phrase) is best
+on average over the benchmark sentences and the held-out conversations. Gzips it into the app's assets and writes RESULTS.md.
 
     python3 tools/nextword/choose.py RESULTS_DIR
 
@@ -28,7 +28,7 @@ def main():
         sys.exit("no results")
 
     def mean(r):
-        return (r["sentences"]["top3"] + r["conversation"]["top3"]) / 2
+        return (r["sentences_all"]["top3"] + r["conversation_all"]["top3"]) / 2
     # The model already shipped comes first, so it wins ties.
     results.sort(key=lambda r: r["variant"] != "current")
     best = max(results, key=mean)
@@ -51,7 +51,10 @@ def main():
         f"Dictionary alone: sentences top-3 {s0['dictionary_top3']}% (top-1 {s0['dictionary_top1']}%), "
         f"conversation top-3 {c0['dictionary_top3']}% (top-1 {c0['dictionary_top1']}%).",
         "",
-        "| Variant | Sentences top-3 | Sentences top-1 | Conversation top-3 | Conversation top-1 | Perplexity | Weight / offset | File MB | Trained |",
+        "Columns are top-3: mid-sentence, at the first word of a sentence or phrase, and over",
+        "every word (what picks the winner, averaged over both sets).",
+        "",
+        "| Variant | Sentences | Sentence starts | Conversation | Conversation starts | Every word (avg) | Perplexity | Weight / offset | Trained |",
         "|---|---|---|---|---|---|---|---|---|",
     ]
     for r in results:
@@ -60,9 +63,9 @@ def main():
         trained = (f"{r['train_minutes']} min, {r['tokens_seen_m']}M words seen of {r['train_tokens_m']}M"
                    if "train_minutes" in r else "earlier")
         lines.append(
-            f"| {name}{mark} | {r['sentences']['top3']} | {r['sentences']['top1']} | "
-            f"{r['conversation']['top3']} | {r['conversation']['top1']} | {r.get('validation_perplexity', '–')} | "
-            f"{r['weight']} / {r['offset']} | {r.get('file_mb', '–')} | {trained} |")
+            f"| {name}{mark} | {r['sentences']['top3']} | {r['sentences_start']['top3']} | "
+            f"{r['conversation']['top3']} | {r['conversation_start']['top3']} | {mean(r):.1f} | "
+            f"{r.get('validation_perplexity', '–')} | {r['weight']} / {r['offset']} | {trained} |")
     lines += ["", f"Shipped file: `app/src/main/assets/models/next_en.wlmz` "
               f"({ASSET.stat().st_size / 1e6:.1f} MB gzipped).", "", "## Details", ""]
     lines += [f"- **{r['variant']}**: `{json.dumps(r)}`" for r in results]

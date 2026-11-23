@@ -8,7 +8,8 @@ import java.io.File
  * For training the next-word model (tools/nextword, run by its workflow): writes, for every
  * next-word position the typing benchmark scores, the sentence so far and the dictionary's top 30
  * candidates with their scores, so the model can be tuned and measured on exactly the lists
- * Suggester will hand it, plus the dictionary's word list ("<file>.words.tsv").
+ * Suggester will hand it, plus the dictionary's word list ("<file>.words.tsv"). The first word of
+ * each sentence or phrase is written too, with no candidates and "start": true.
  *
  * Runs only when WEFT_NEXT_WORD_DUMP names the output file. WEFT_NEXT_WORD_SENTENCES picks the
  * sentences file in tools/bench/data (sentences_en.txt by default).
@@ -39,11 +40,21 @@ class NextWordDumpTest {
                 for (chunk in chunks) {
                     for ((j, raw) in chunk.withIndex()) {
                         val match = all[g++]
-                        val previous = chunk.getOrNull(j - 1)?.replace('’', '\'') ?: continue
+                        val prefix = sentence.substring(0, match.range.first)
+                        val previous = chunk.getOrNull(j - 1)?.replace('’', '\'')
+                        if (previous == null) {
+                            // The first word of a sentence or phrase: only the model predicts these.
+                            if (j == 0 && TextContext.parse(prefix).phraseStart) {
+                                w.write("{\"i\":$index,\"prefix\":${json(prefix)},\"target\":" +
+                                    "${json(raw.replace('’', '\''))},\"cands\":[],\"start\":true}\n")
+                                rows++
+                            }
+                            continue
+                        }
                         val before = chunk.getOrNull(j - 2)?.replace('’', '\'')
                         val result = suggester.suggest("", previous, limit = Suggester.MODEL_CANDIDATES, before = before)
                         val cands = result.suggestions.joinToString(",") { "[${json(it.word)},${it.score}]" }
-                        w.write("{\"i\":$index,\"prefix\":${json(sentence.substring(0, match.range.first))}," +
+                        w.write("{\"i\":$index,\"prefix\":${json(prefix)}," +
                             "\"target\":${json(raw.replace('’', '\''))},\"cands\":[$cands]}\n")
                         rows++
                     }

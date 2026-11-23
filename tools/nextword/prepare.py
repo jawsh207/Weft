@@ -7,6 +7,8 @@ Writes the training text for Weft's next-word model (see README.md).
 Makes, in OUT_DIR:
   general.txt       Tatoeba (minus the benchmark's held-out sentences), Common
                     Voice and Leipzig news: the sentences the dictionary is built from.
+                    Tatoeba's countless "Tom" and "Mary" sentences get a spread of
+                    other first names instead, so the model doesn't learn to expect Tom.
   conversation.txt  Google's Taskmaster dialogs (CC BY 4.0): people ordering,
                     booking and chatting with an assistant, typed or spoken.
                     TM-3 (movie tickets) is cut to a quarter so tickets don't take over.
@@ -21,6 +23,7 @@ dialogs, never trained on) for the benchmark: tools/bench/data/conversation_en.t
 """
 import argparse
 import json
+import random
 import re
 import sys
 import urllib.request
@@ -40,6 +43,17 @@ TRAIN_FILES = (
 )
 TEST_FILES = ["TM-2-2020/data/sports.json", "TM-2-2020/data/music.json"]
 SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+# Common English first names that stand in for Tatoeba's Tom and Mary.
+NAMES = """James John Robert Michael David William Richard Joseph Thomas Charles Daniel Matthew
+Anthony Mark Steven Paul Andrew Joshua Kevin Brian George Edward Ryan Jacob Gary Nicholas Eric
+Jonathan Stephen Larry Justin Scott Brandon Benjamin Samuel Frank Gregory Alexander Patrick Jack
+Dennis Jerry Tyler Aaron Henry Adam Nathan Peter Zachary Kyle Noah Ethan Jeremy Christian Sean
+Austin Carl Harold Liam Oliver Lucas Leo Omar Raj Ahmed Wei Hiroshi Carlos Diego Luis Kofi
+Mary Patricia Jennifer Linda Elizabeth Barbara Susan Jessica Sarah Karen Lisa Nancy Betty Sandra
+Margaret Ashley Kimberly Emily Donna Michelle Carol Amanda Melissa Deborah Stephanie Rebecca Laura
+Sharon Cynthia Kathleen Amy Angela Shirley Anna Brenda Emma Olivia Ava Sophia Isabella Mia Chloe
+Grace Hannah Zoe Lily Ella Priya Aisha Fatima Mei Yuki Sofia Lucia Amara Nadia""".split()
+TOM_MARY = re.compile(r"\b(Tom|Mary)\b")
 
 
 def fetch_taskmaster(name, cache):
@@ -61,6 +75,17 @@ def dialog_sentences(path):
             for s in SENTENCE_END.split(u.get("text", "").replace("\n", " ").strip()):
                 if len(s.split()) >= 2:
                     yield s
+
+
+def vary_names(sentences):
+    """Tatoeba sentences with each "Tom" or "Mary" swapped for a name picked from the sentence."""
+    for s in sentences:
+        if "Tom" not in s and "Mary" not in s:
+            yield s
+            continue
+        rng = random.Random(s)
+        picks = {}
+        yield TOM_MARY.sub(lambda m: picks.setdefault(m.group(1), rng.choice(NAMES)), s)
 
 
 def main() -> None:
@@ -103,7 +128,7 @@ def main() -> None:
 
     with open(out / "general.txt", "w", encoding="utf-8") as f:
         if paths["tatoeba"]:
-            put(f, "tatoeba", bd.tatoeba_sentences(paths["tatoeba"]))
+            put(f, "tatoeba", vary_names(bd.tatoeba_sentences(paths["tatoeba"])))
         if paths["commonvoice"]:
             put(f, "commonvoice", bd.plain_sentences(paths["commonvoice"], held_out))
         if paths["leipzig"]:

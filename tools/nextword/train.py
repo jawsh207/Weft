@@ -11,6 +11,7 @@ DATA_DIR, how many passes to make and how fast the learning rate falls:
   general        general.txt only, 5 passes
   conversation   + conversation.txt (Taskmaster dialogs), 5 passes (v1.3.0)
   long           the same text, 9 passes, gentler learning-rate fall
+  conv2, conv3   the same, with the conversation text counted twice or three times
 
 The model: 30,000-word vocabulary, 128-wide word vectors, one 256-wide LSTM
 layer and an adaptive softmax (about 5.6 million weights, 6 MB as int8). It is
@@ -70,6 +71,9 @@ VARIANTS = {
     # The same text, longer and with a gentler learning-rate fall: shipped after v1.3.0.
     # (Adding OpenAssistant's messages, or counting the conversation text twice, did no better.)
     "long": Variant({"general.txt": 1, "conversation.txt": 1}, 9, 0.7, GENERAL + TASKMASTER),
+    # The conversation text counted two or three times, for sentence starts in conversation.
+    "conv2": Variant({"general.txt": 1, "conversation.txt": 2}, 9, 0.7, GENERAL + TASKMASTER),
+    "conv3": Variant({"general.txt": 1, "conversation.txt": 3}, 8, 0.7, GENERAL + TASKMASTER),
 }
 
 
