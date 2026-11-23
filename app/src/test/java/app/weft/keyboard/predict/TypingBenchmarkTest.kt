@@ -20,7 +20,9 @@ import java.io.File
  *    wrongly change.
  *  - Next word: how often the next word is among the three predictions, with the
  *    next-word model when it's built (and the dictionary alone, for comparison),
- *    on the held-out sentences and on held-out conversations.
+ *    on the held-out sentences and on held-out conversations. Reported apart:
+ *    the first word of a sentence or phrase (after . , ! ? and the like), which
+ *    only the model predicts.
  *  - Keystrokes saved: letters you don't type when you tap a suggestion as
  *    soon as the word shows up in the strip.
  *
@@ -103,23 +105,29 @@ class TypingBenchmarkTest {
         var predicted = 0
         var dictPredicted = 0
         var targets = 0
+        val starts = Tally()
         var typed = 0
         var full = 0
         for ((i, sentence) in sentences(data).withIndex()) {
-            forEachWord(sentence) { w, previous, before, context ->
-                if (previous != null) {
+            forEachWord(sentence) { p ->
+                if (p.previous != null) {
                     targets++
-                    if (hit(suggester.suggest("", previous, before = before, sentence = context), w)) predicted++
-                    if (model != null && hit(dictOnly.suggest("", previous, before = before), w)) dictPredicted++
+                    if (hit(suggester.suggest("", p.previous, before = p.before, sentence = p.context), p.word)) predicted++
+                    if (model != null && hit(dictOnly.suggest("", p.previous, before = p.before), p.word)) dictPredicted++
+                } else if (p.phraseStart) {
+                    starts.count(hit(suggester.suggest("", null, sentence = p.context, phraseStart = true), p.word))
                 }
                 if (i % KSR_EVERY != 0) return@forEachWord
                 // Keystrokes: type letters until the word is in the strip, then tap it.
-                val letters = w.codePointCount(0, w.length)
+                val letters = p.word.codePointCount(0, p.word.length)
                 var cost = letters + 1 // all letters, then space
                 for (k in 0 until letters) {
-                    val prefix = w.substring(0, w.offsetByCodePoints(0, k))
-                    if (k == 0 && previous == null) continue
-                    if (hit(suggester.suggest(prefix, previous, before = before, sentence = context), w)) {
+                    val prefix = p.word.substring(0, p.word.offsetByCodePoints(0, k))
+                    if (k == 0 && p.previous == null && !p.phraseStart) continue
+                    val result = suggester.suggest(
+                        prefix, p.previous, before = p.before, sentence = p.context, phraseStart = p.phraseStart,
+                    )
+                    if (hit(result, p.word)) {
                         cost = k + 1
                         break
                     }
@@ -130,6 +138,7 @@ class TypingBenchmarkTest {
         }
         val alone = if (model != null) " (dictionary alone %.1f%%)".format(pct(dictPredicted, targets)) else ""
         report("next word in top 3 %.1f%%%s (%d words)".format(pct(predicted, targets), alone, targets))
+        report("first word of a sentence or phrase in top 3 ${starts.percent()}")
         report("keystrokes saved %.1f%%".format(100.0 - pct(typed, full)))
 
         // Conversation: Taskmaster dialogs no model trained on (tools/bench/data/README.md).
@@ -138,26 +147,58 @@ class TypingBenchmarkTest {
             var hits = 0
             var dictHits = 0
             var n = 0
+            val convStarts = Tally()
             for (sentence in conversation.readLines().filter { it.isNotBlank() }) {
-                forEachWord(sentence) { w, previous, before, context ->
-                    if (previous == null) return@forEachWord
+                forEachWord(sentence) { p ->
+                    if (p.previous == null) {
+                        if (p.phraseStart) {
+                            convStarts.count(hit(suggester.suggest("", null, sentence = p.context, phraseStart = true), p.word))
+                        }
+                        return@forEachWord
+                    }
                     n++
-                    if (hit(suggester.suggest("", previous, before = before, sentence = context), w)) hits++
-                    if (model != null && hit(dictOnly.suggest("", previous, before = before), w)) dictHits++
+                    if (hit(suggester.suggest("", p.previous, before = p.before, sentence = p.context), p.word)) hits++
+                    if (model != null && hit(dictOnly.suggest("", p.previous, before = p.before), p.word)) dictHits++
                 }
             }
             val convAlone = if (model != null) " (dictionary alone %.1f%%)".format(pct(dictHits, n)) else ""
             report("next word in conversation %.1f%%%s (%d words)".format(pct(hits, n), convAlone, n))
+            report("first word of a sentence or phrase in conversation ${convStarts.percent()}")
         }
         assertTrue("next-word predictions got worse", pct(predicted, targets) >= MIN_NEXT_WORD)
+        if (model != null) assertTrue("sentence-start predictions got worse", starts.pct() >= MIN_PHRASE_START)
+    }
+
+    /** Hits out of tries, for one benchmark line. */
+    private class Tally {
+        var hits = 0
+        var n = 0
+
+        fun count(hit: Boolean) {
+            n++
+            if (hit) hits++
+        }
+
+        fun pct() = if (n == 0) 0.0 else hits * 100.0 / n
+
+        fun percent() = "%.1f%% (%d words)".format(pct(), n)
     }
 
     /**
-     * Calls [action] for each word of [sentence] with the word before it and the one before that
-     * (within runs without punctuation, like the keyboard's TextContext) and the sentence so far
-     * as the next-word model sees it.
+     * One word of a benchmark sentence: the word before it and the one before that (within runs
+     * without punctuation, like the keyboard's TextContext), the sentence so far as the next-word
+     * model sees it, and whether the keyboard would treat it as starting a sentence or phrase.
      */
-    private fun forEachWord(sentence: String, action: (String, String?, String?, List<String>) -> Unit) {
+    private class Position(
+        val word: String,
+        val previous: String?,
+        val before: String?,
+        val context: List<String>,
+        val phraseStart: Boolean,
+    )
+
+    /** Calls [action] for each word of [sentence]. */
+    private fun forEachWord(sentence: String, action: (Position) -> Unit) {
         val all = WORD.findAll(sentence).toList()
         val chunks = chunks(sentence)
         val aligned = chunks.sumOf { it.size } == all.size
@@ -166,7 +207,8 @@ class TypingBenchmarkTest {
             for ((j, w) in chunk.withIndex()) {
                 val match = if (aligned) all[g++] else null
                 val context = match?.let { TextContext.sentenceWords(sentence, it.range.first) } ?: emptyList()
-                action(w, chunk.getOrNull(j - 1), chunk.getOrNull(j - 2), context)
+                val start = j == 0 && match != null && TextContext.parse(sentence.substring(0, match.range.first)).phraseStart
+                action(Position(w, chunk.getOrNull(j - 1), chunk.getOrNull(j - 2), context, start))
             }
         }
     }
@@ -196,5 +238,7 @@ class TypingBenchmarkTest {
         const val MIN_FIXED = 65.0
         const val MAX_FALSE = 0.5
         const val MIN_NEXT_WORD = 42.0
+        // With the model, Nov 2026: 25.2% (the dictionary alone has nothing there).
+        const val MIN_PHRASE_START = 22.0
     }
 }

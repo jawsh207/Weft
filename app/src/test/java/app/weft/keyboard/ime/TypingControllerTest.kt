@@ -387,6 +387,18 @@ class TypingControllerTest {
     }
 
     @Test
+    fun shiftCapitalizesSuggestions() {
+        val chip = SuggestionChip("the")
+        assertEquals(chip, TypingController.withShift(chip, on = false, locked = false))
+        assertEquals(SuggestionChip("The"), TypingController.withShift(chip, on = true, locked = false))
+        assertEquals(SuggestionChip("THE"), TypingController.withShift(chip, on = true, locked = true))
+        val asTyped = SuggestionChip("teh", ChipStyle.Verbatim)
+        assertEquals(asTyped, TypingController.withShift(asTyped, on = true, locked = false))
+        val emoji = SuggestionChip("😀", ChipStyle.Emoji)
+        assertEquals(emoji, TypingController.withShift(emoji, on = true, locked = true))
+    }
+
+    @Test
     fun leavesIAloneWhereCapitalizingIsOff() {
         controller.capitalizeI = false
         controller.autocorrectEnabled = false

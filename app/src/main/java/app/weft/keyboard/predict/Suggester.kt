@@ -78,6 +78,8 @@ class Suggester(
      * Suggestions for [typed] (the word being typed, maybe empty) after
      * [previous] and, before that, [before] (the word two back). [sentence] is every word of the
      * sentence before [typed], for the next-word model; empty means just [before] and [previous].
+     * [phraseStart] (see [WordContext.phraseStart]) lets the model predict the first word of a
+     * sentence or phrase, where the dictionary's word pairs have nothing to go on.
      */
     fun suggest(
         typed: String,
@@ -85,6 +87,7 @@ class Suggester(
         limit: Int = 3,
         before: String? = null,
         sentence: List<String> = emptyList(),
+        phraseStart: Boolean = false,
     ): SuggestionResult {
         val dict = dictionary
         val prevNode = if (dict != null && previous != null) dict.findIgnoreCase(previous) else -1
@@ -95,7 +98,11 @@ class Suggester(
         }
 
         if (typed.isEmpty()) {
-            if (previous == null) return SuggestionResult.EMPTY
+            if (previous == null) {
+                val m = model
+                if (!phraseStart || m == null) return SuggestionResult.EMPTY
+                return SuggestionResult("", withModel(m, dict, emptyList(), sentence, limit), true, null)
+            }
             val words = sentence.ifEmpty { listOfNotNull(before, previous) }
             return SuggestionResult("", predict(dict, prev2Node, prevNode, previous, words, limit), true, null)
         }
@@ -308,9 +315,11 @@ class Suggester(
 
     /**
      * Re-ranks the dictionary's best next-word [candidates] with the model: each gets weight ×
-     * the model's log-probability for it, and the model's own likeliest words (dictionary words
-     * only) join in, starting a little below the weakest candidate. The weight and offset come from
-     * the model file, tuned by tools/nextword/train.py with exactly this rule (common.top3).
+     * the model's log-probability for it, and the model's own likeliest words join in, starting a
+     * little below the weakest candidate. Those must be dictionary words and not names: much of
+     * the training text is Tatoeba, whose example sentences are full of "Tom" and "Mary". The
+     * weight and offset come from the model file, tuned by tools/nextword/train.py with exactly
+     * this rule (common.top3).
      */
     private fun withModel(
         m: NextWordModel,
@@ -333,8 +342,9 @@ class Suggester(
                 if (added >= MODEL_GUESSES) break
                 val node = dict.findIgnoreCase(word)
                 if (node < 0 || dict.freq(node) == 0 || dict.isOffensive(node)) continue
-                added++
                 val display = dict.word(node)
+                if (isName(display)) continue
+                added++
                 if (word in out || learned.isRemoved(display)) continue
                 out[word] = Suggestion(display, SuggestionKind.Prediction, base + m.weight * logProb, 0f)
             }
@@ -609,6 +619,11 @@ class Suggester(
         const val MODEL_CANDIDATES = 30
         const val MODEL_TOP = 40
         const val MODEL_GUESSES = 20
+
+        private val CAPITAL_I = Regex("I(?:['’](?:m|ll|ve|d))?")
+
+        /** A word the dictionary only knows with a capital ("Tom", "Paris"), apart from "I" and "I'm" etc. */
+        fun isName(word: String): Boolean = word.firstOrNull()?.isUpperCase() == true && !CAPITAL_I.matches(word)
         /** A correction scoring below this is offered in the strip but not applied by space. */
         const val MIN_AUTOCORRECT_SCORE = 0.75f
 

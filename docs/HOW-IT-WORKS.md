@@ -31,6 +31,7 @@ typed, learned or logged can be sent anywhere.
 | Finish a word with space | `ime/TypingController.kt` asks `predict/Suggester.kt` whether the word needs correcting, replaces it if so, and remembers the change so backspace can undo it |
 | Look at the three suggestions | `predict/Suggester.kt` finds and ranks them; `ime/TypingController.kt` arranges them in the strip |
 | Finish a word and see what might come next | `predict/Suggester.kt` takes the dictionary's likely next words; `predict/NextWordModel.kt` re-ranks them by the whole sentence so far and adds its own guesses |
+| Start a sentence, or carry on after a comma, and see suggested first words | `predict/TextContext.kt` spots the start; `predict/NextWordModel.kt` guesses the word; `ui/KeyboardScreen.kt` capitalizes the suggestions while shift is on |
 | Swipe across letters | `ui/SwipeArea.kt` follows the finger and draws the trail; `predict/SwipeDecoder.kt` turns the path into words |
 | Hold a key | `ui/AlternatesPopup.kt` shows accents, fractions or skin tones; the choices are listed in `layout/KeyboardLayout.kt` |
 | Use the tools row (select all, cut, copy, paste…) | `ui/KeyboardScreen.kt` draws the buttons; `ime/WeftKeyboardService.kt` asks the app to do the edit |
@@ -72,7 +73,8 @@ benchmarked on any computer.
 - **`NextWordModel.kt`** is a small neural network (about 6 MB) that reads the
   sentence so far and scores every word it knows as the next one. It runs in
   plain Kotlin, a few milliseconds per word; `Suggester.kt` mixes its scores
-  into next-word predictions.
+  into next-word predictions, and it alone predicts the first word of a
+  sentence or phrase.
 - **`KeyProximity.kt`** knows which keys are neighbours, so hitting "r" for
   "e" counts as a small slip and "p" for "e" as a big one.
 - **`SwipeDecoder.kt`** turns a swiped path into words, using the shape of the
@@ -82,7 +84,8 @@ benchmarked on any computer.
   undid, words you removed, and your swiping habits. Saved in two small files
   in the app's private storage.
 - **`TextContext.kt`** works out, from the text before the cursor, which word
-  is being typed, what came before it, and the sentence so far.
+  is being typed, what came before it, the sentence so far, and whether the
+  cursor starts a new sentence or phrase.
 
 ### `layout/` — what is on the keyboard
 

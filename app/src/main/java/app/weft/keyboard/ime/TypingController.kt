@@ -133,7 +133,13 @@ class TypingController(private val learned: LearnedWords) {
     fun compute(ctx: WordContext): SuggestionResult {
         val s = suggester
         if (!suggestionsEnabled || s == null) return SuggestionResult.EMPTY
-        return s.suggest(ctx.fragment, ctx.previous, before = ctx.before, sentence = ctx.sentence)
+        return s.suggest(
+            ctx.fragment,
+            ctx.previous,
+            before = ctx.before,
+            sentence = ctx.sentence,
+            phraseStart = ctx.phraseStart,
+        )
     }
 
     /** Remembers [result] (so space can reuse it) and returns chips for the strip. */
@@ -472,6 +478,17 @@ class TypingController(private val learned: LearnedWords) {
         const val CONTEXT_CHARS = 200
 
         private val LOWER_I = Regex("i(?:['’](?:m|ll|ve|d))?")
+
+        /**
+         * How [chip] shows, and is typed, while shift is on: first letter capitalized, or all
+         * capitals when [locked]. So a prediction at the start of a sentence reads "The", not
+         * "the". Emoji and the word exactly as typed are left alone.
+         */
+        fun withShift(chip: SuggestionChip, on: Boolean, locked: Boolean): SuggestionChip = when {
+            !on || chip.style == ChipStyle.Emoji || chip.style == ChipStyle.Verbatim -> chip
+            locked -> chip.copy(text = chip.text.uppercase())
+            else -> chip.copy(text = chip.text.replaceFirstChar { it.titlecase() })
+        }
 
         /** "I", "I'm", "I'll", "I've", "I'd" for their lowercase forms; null for anything else. */
         fun capitalI(word: String): String? =

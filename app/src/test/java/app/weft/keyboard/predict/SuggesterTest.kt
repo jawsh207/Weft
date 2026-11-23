@@ -223,10 +223,24 @@ class SuggesterTest {
         assertEquals(WordContext("", "I", null, listOf("Yes", "I")), TextContext.parse("Yes, I "))
         assertEquals(WordContext("go", "to", "want", listOf("I", "want", "to")), TextContext.parse("I want to go"))
         assertEquals(WordContext("don't", null), TextContext.parse("don't"))
-        assertEquals(WordContext("", null), TextContext.parse(""))
+        assertEquals(WordContext("", null, phraseStart = true), TextContext.parse(""))
         assertEquals(WordContext("x", null), TextContext.parse("'x"))
         assertEquals(listOf("so", "I’ll", "see", "you"), TextContext.parse("Done!\nOK. so I’ll see 2 you ").sentence)
         assertEquals(listOf("we", "met"), TextContext.parse("Hi?? we met ").sentence)
+    }
+
+    @Test
+    fun spotsSentenceAndPhraseStarts() {
+        for (text in listOf("", "Hi. ", "Yes, ", "Wait!  ", "Well… ", "Dear Sam,\n", "Line one\n", "Note: ")) {
+            assertTrue("'$text'", TextContext.parse(text).phraseStart)
+        }
+        // Not straight after the punctuation, not after other symbols or digits, not mid-word.
+        for (text in listOf("Hi.", "Yes,", "at 5 ", "(", "\"Hi ", "so ", "Hel", "Hi. Th")) {
+            assertFalse("'$text'", TextContext.parse(text).phraseStart)
+        }
+        // Text the app wouldn't give us isn't a sentence start.
+        assertFalse(TextContext.parse(null).phraseStart)
+        assertEquals(listOf("Well", "I"), TextContext.parse("Hi. Well, I think, ").sentence.take(2))
         assertTrue(TextContext.isSeparator(" "))
         assertTrue(TextContext.isSeparator(","))
         assertFalse(TextContext.isSeparator("a"))
@@ -320,7 +334,7 @@ class SuggesterTest {
         for (c in cands) scores[c.word.lowercase()] = c.score + model.weight * p.logProb(c.word)
         val base = cands.minOf { it.score } - model.offset
         p.top(Suggester.MODEL_TOP)
-            .filter { (w, _) -> dict.findIgnoreCase(w).let { it >= 0 && dict.freq(it) > 0 && !dict.isOffensive(it) } }
+            .filter { (w, _) -> dict.findIgnoreCase(w).let { it >= 0 && dict.freq(it) > 0 && !dict.isOffensive(it) && !Suggester.isName(dict.word(it)) } }
             .take(Suggester.MODEL_GUESSES)
             .forEach { (w, lp) -> scores.putIfAbsent(w, base + model.weight * lp) }
         val expected = scores.entries.sortedByDescending { it.value }.take(3).map { it.key }
@@ -328,6 +342,14 @@ class SuggesterTest {
         val got = withModel.suggest("", "you", before = "see", sentence = sentence).suggestions
         assertEquals(expected, got.map { it.word.lowercase() })
         assertTrue(got.all { it.kind == SuggestionKind.Prediction && dict.findIgnoreCase(it.word) >= 0 })
+        // At the start of a sentence or phrase only the model has ideas, and only when allowed.
+        val start = withModel.suggest("", null, sentence = listOf("so"), phraseStart = true).suggestions
+        val startExpected = model.predict(listOf("so")).top(Suggester.MODEL_TOP)
+            .filter { (w, _) -> dict.findIgnoreCase(w).let { it >= 0 && dict.freq(it) > 0 && !dict.isOffensive(it) && !Suggester.isName(dict.word(it)) } }
+            .take(3).map { it.first }
+        assertEquals(startExpected, start.map { it.word.lowercase() })
+        assertTrue(withModel.suggest("", null, sentence = listOf("so")).suggestions.isEmpty())
+        assertTrue(suggester.suggest("", null, phraseStart = true).suggestions.isEmpty())
         // Typing a word doesn't involve the model.
         assertEquals(
             suggester.suggest("lat", "you", before = "see").suggestions,

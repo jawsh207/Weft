@@ -15,6 +15,12 @@ data class WordContext(
      * across . ! ? or a new line: what the next-word model reads ([NextWordModel]).
      */
     val sentence: List<String> = emptyList(),
+    /**
+     * Nothing is being typed and the cursor starts a sentence or phrase: the field is empty, or
+     * the text before ends in a line break, or in . ! ? … , ; : and a space. The next-word model
+     * can predict here even though there is no [previous] word.
+     */
+    val phraseStart: Boolean = false,
 )
 
 /**
@@ -29,6 +35,28 @@ object TextContext {
      */
     fun parse(before: CharSequence?): WordContext {
         val text = before?.toString().orEmpty()
+        val ctx = parseWords(text)
+        return if (before != null && ctx.fragment.isEmpty() && ctx.previous == null && opensPhrase(text)) {
+            ctx.copy(phraseStart = true)
+        } else {
+            ctx
+        }
+    }
+
+    /**
+     * Whether [text] (the text before the cursor) ends where a sentence or phrase begins: it is
+     * empty, ends in a line break, or ends in sentence or clause punctuation followed by a space.
+     */
+    fun opensPhrase(text: String): Boolean {
+        var i = text.length
+        while (i > 0 && text[i - 1] == ' ') i--
+        if (i == 0 || text[i - 1] == '\n') return true
+        return i < text.length && text[i - 1] in PHRASE_ENDS
+    }
+
+    private const val PHRASE_ENDS = ".!?…,;:"
+
+    private fun parseWords(text: String): WordContext {
         var end = text.length
         var start = end
         while (start > 0) {

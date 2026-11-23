@@ -83,6 +83,7 @@ import app.weft.keyboard.ime.ChipStyle
 import app.weft.keyboard.ime.KeyboardState
 import app.weft.keyboard.ime.ShiftState
 import app.weft.keyboard.ime.SuggestionChip
+import app.weft.keyboard.ime.TypingController
 import app.weft.keyboard.layout.ActionKey
 import app.weft.keyboard.layout.CharKey
 import app.weft.keyboard.layout.Gap
@@ -286,7 +287,12 @@ private fun TopStrip(
                     onCancel = { state.pendingRemoval = null },
                 )
                 state.suggestions.isNotEmpty() -> SuggestionRow(
-                    state.suggestions,
+                    // Shown (and typed) with shift applied: "The" at the start of a sentence.
+                    state.suggestions.map { chip ->
+                        chip?.let {
+                            TypingController.withShift(it, state.shift != ShiftState.Off, state.shift == ShiftState.Locked)
+                        }
+                    },
                     onSuggestion,
                     onLongPress = { if (it.style != ChipStyle.Emoji) state.pendingRemoval = it.text },
                 )
