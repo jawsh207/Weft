@@ -139,6 +139,7 @@
     <string name="settings_dictionary_missing">No dictionary is bundled in this build, so suggestions use learned words only. Build one with tools/dictgen/make_dict.py.</string>
     <string name="settings_dictionary_words">%1$s · %2$,d words</string>
     <string name="settings_dictionary_sources">Built from these open sources:</string>
+    <string name="settings_next_word_model">Next-word predictions also use a small model trained on: %1$s</string>
     <string name="settings_emoji_title">Emoji</string>
     <string name="settings_emoji_body">Emoji are drawn with your phone\'s own emoji font. The list, names and skin tones come from Unicode\'s emoji data. Search keywords come from Unicode CLDR (Unicode License v3), emojilib and GitHub\'s gemoji shortcodes (MIT). License texts are included with the app.</string>
     <string name="settings_log_title">Troubleshooting</string>

@@ -23,3 +23,22 @@ object RealDictionary {
 
     fun load(): BinaryDictionary? = file?.let { BinaryDictionary.map(it) }
 }
+
+/**
+ * The real next-word model from the app's assets (models/next_en.wlmz, built by tools/nextword),
+ * unpacked once per test run. Null if it hasn't been built.
+ */
+object RealNextWordModel {
+    private val candidates = listOf("src/main/assets/models", "app/src/main/assets/models")
+
+    val file: File? by lazy {
+        val dir = candidates.map(::File).firstOrNull { it.isDirectory } ?: return@lazy null
+        val packed = File(dir, "next_en.wlmz").takeIf { it.exists() } ?: return@lazy null
+        File.createTempFile("next_en", ".wlm").apply {
+            deleteOnExit()
+            GZIPInputStream(packed.inputStream().buffered()).use { inp -> outputStream().use { inp.copyTo(it) } }
+        }
+    }
+
+    fun load(): NextWordModel? = file?.let { NextWordModel.map(it) }
+}

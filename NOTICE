@@ -25,6 +25,14 @@ Settings > About.
   https://github.com/en-wl/wordlist
 - Hunspell en_US word list (fallback allow list, derived from SCOWL). MIT-like.
 
+The next-word model (app/src/main/assets/models) is trained by tools/nextword
+on the Tatoeba, Common Voice and Leipzig sentences above and on:
+
+- Google Taskmaster-1 to -4 dialogs. CC BY 4.0. Copyright Google LLC.
+  https://github.com/google-research-datasets/Taskmaster
+
+The text it was trained on is also shown under Settings > About.
+
 The emoji list (app/src/main/assets/emoji) is built by tools/emojigen from:
 
 - Unicode emoji data and CLDR annotations. Unicode License v3.
@@ -34,6 +42,7 @@ The emoji list (app/src/main/assets/emoji) is built by tools/emojigen from:
 Their license texts ship beside the list as LICENSE-*.txt.
 
 Test-only data, not part of the app: tools/bench/data holds held-out Tatoeba
-sentences (CC BY 2.0 FR). The benchmark also uses Wikipedia's list of common
+sentences (CC BY 2.0 FR) and held-out Taskmaster-2 dialog sentences (CC BY 4.0,
+Google LLC). The benchmark also uses Wikipedia's list of common
 misspellings (CC BY-SA 4.0), which is not stored in this repository: the
 tests download it when they run. See tools/bench/data/README.md.

@@ -4,6 +4,7 @@ import android.content.Context
 import android.provider.UserDictionary
 import android.util.Log
 import app.weft.keyboard.predict.BinaryDictionary
+import app.weft.keyboard.predict.NextWordModel
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileNotFoundException
@@ -11,9 +12,10 @@ import java.nio.ByteBuffer
 import java.util.zip.GZIPInputStream
 
 /**
- * Finds the word list for a keyboard language inside the app and opens it, and
- * reads the phone's personal dictionary. The prediction code itself (the
- * predict package) knows nothing about Android; this is the part that does.
+ * Finds the word list for a keyboard language inside the app and opens it, opens
+ * the next-word model, and reads the phone's personal dictionary. The prediction
+ * code itself (the predict package) knows nothing about Android; this is the part
+ * that does.
  */
 object DictionaryLoader {
     private const val TAG = "DictionaryLoader"
@@ -71,12 +73,31 @@ object DictionaryLoader {
     fun packedPath(locale: String) = "dictionaries/main_$locale.ekdz"
 
     /** Unpacks dictionaries/main_<locale>.ekdz once per app version; null if there's no such asset. */
+    private fun unpacked(context: Context, locale: String): File? =
+        unpack(context, packedPath(locale), "dictionaries", "main_${locale}_", ".ekd")
+
+    /** Where the gzipped English next-word model sits in the APK (tools/nextword builds it). */
+    const val MODEL_PATH = "models/next_en.wlmz"
+
+    /**
+     * The next-word model for English (one model serves every English variant), or null if the
+     * build has none. Unpacked once per app version like the dictionaries, then memory-mapped.
+     * Call off the main thread.
+     */
+    fun loadNextWordModel(context: Context): NextWordModel? =
+        runCatching { unpack(context, MODEL_PATH, "models", "next_en_", ".wlm")?.let { NextWordModel.map(it) } }
+            .onFailure { Log.w(TAG, "Could not load $MODEL_PATH", it) }
+            .getOrNull()
+
+    /**
+     * Unpacks the gzipped asset [gz] into [dirName] in the app's private, non-backed-up storage as
+     * <[prefix]><app version><[suffix]>, once per app version; null if there's no such asset.
+     */
     @Synchronized
-    private fun unpacked(context: Context, locale: String): File? {
-        val gz = packedPath(locale)
-        val dir = File(context.noBackupFilesDir, "dictionaries")
+    private fun unpack(context: Context, gz: String, dirName: String, prefix: String, suffix: String): File? {
+        val dir = File(context.noBackupFilesDir, dirName)
         val version = context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime
-        val file = File(dir, "main_${locale}_$version.ekd")
+        val file = File(dir, "$prefix$version$suffix")
         if (file.exists()) return file
         val input = try {
             context.assets.open(gz)
@@ -85,7 +106,7 @@ object DictionaryLoader {
         }
         dir.mkdirs()
         // Drop copies from earlier versions of the app.
-        dir.listFiles { f -> f.name.startsWith("main_${locale}_") }?.forEach { it.delete() }
+        dir.listFiles { f -> f.name.startsWith(prefix) }?.forEach { it.delete() }
         val tmp = File(dir, file.name + ".tmp")
         GZIPInputStream(input.buffered()).use { inp -> tmp.outputStream().use { inp.copyTo(it) } }
         if (!tmp.renameTo(file)) return null

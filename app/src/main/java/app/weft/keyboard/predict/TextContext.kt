@@ -10,6 +10,11 @@ data class WordContext(
     val previous: String?,
     /** The word before [previous], under the same rules (plain spaces only). */
     val before: String? = null,
+    /**
+     * Every word of the current sentence before [fragment], across commas and the like but not
+     * across . ! ? or a new line: what the next-word model reads ([NextWordModel]).
+     */
+    val sentence: List<String> = emptyList(),
 )
 
 /**
@@ -34,11 +39,12 @@ object TextContext {
         // A word can't start with an apostrophe or hyphen ('quoted' text).
         while (start < end && (text[start] == '\'' || text[start] == '’' || text[start] == '-')) start++
         val fragment = text.substring(start, end)
+        val sentence = sentenceWords(text, start)
 
         // Previous word: only across plain spaces.
         var i = start
         while (i > 0 && text[i - 1] == ' ') i--
-        if (i == start) return WordContext(fragment, null) // no space before: no previous word
+        if (i == start) return WordContext(fragment, null, sentence = sentence) // no space before: no previous word
         end = i
         var s = end
         while (s > 0) {
@@ -48,9 +54,24 @@ object TextContext {
         }
         while (s < end && (text[s] == '\'' || text[s] == '’' || text[s] == '-')) s++
         val previous = text.substring(s, end).takeIf { it.isNotEmpty() }
-            ?: return WordContext(fragment, null)
-        return WordContext(fragment, previous, wordBefore(text, s))
+            ?: return WordContext(fragment, null, sentence = sentence)
+        return WordContext(fragment, previous, wordBefore(text, s), sentence)
     }
+
+    /**
+     * The words of the sentence that [text] is in, up to [end]: from just after the last . ! ? or
+     * line break. Digits and symbols are skipped, as the next-word model was trained.
+     */
+    fun sentenceWords(text: String, end: Int): List<String> {
+        var from = end
+        while (from > 0 && text[from - 1] !in SENTENCE_ENDS) from--
+        return WORD.findAll(text.substring(from, end)).map { it.value }.toList()
+    }
+
+    private const val SENTENCE_ENDS = ".!?\n…"
+
+    /** A word as the next-word model splits text (tools/nextword/common.py): letters, inner apostrophes. */
+    private val WORD = Regex("[\\p{L}\\p{M}]+(?:['’][\\p{L}\\p{M}]+)*")
 
     /** The word ending just before [start] across plain spaces, or null. */
     private fun wordBefore(text: String, start: Int): String? {

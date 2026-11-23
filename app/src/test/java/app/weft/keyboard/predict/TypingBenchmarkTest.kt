@@ -18,7 +18,9 @@ import java.io.File
  *    --misspellings`. Without it this part is skipped (and says so).
  *  - False corrections: real words from held-out sentences that space would
  *    wrongly change.
- *  - Next word: how often the next word is among the three predictions.
+ *  - Next word: how often the next word is among the three predictions, with the
+ *    next-word model when it's built (and the dictionary alone, for comparison),
+ *    on the held-out sentences and on held-out conversations.
  *  - Keystrokes saved: letters you don't type when you tap a suggestion as
  *    soon as the word shows up in the strip.
  *
@@ -94,40 +96,79 @@ class TypingBenchmarkTest {
 
     @Test
     fun prediction() {
-        val (suggester, _, data) = setUp() ?: return assumeTrue("benchmark data not built", false)
+        val (dictOnly, dict, data) = setUp() ?: return assumeTrue("benchmark data not built", false)
+        val model = RealNextWordModel.load()
+        val suggester = Suggester(dict, KeyProximity(KeyGeometry.centers(Layouts.qwerty)), LearnedWords(null), model)
+        if (model == null) report("next-word model not built: predictions use the dictionary alone")
         var predicted = 0
+        var dictPredicted = 0
         var targets = 0
         var typed = 0
         var full = 0
         for ((i, sentence) in sentences(data).withIndex()) {
-            for (chunk in chunks(sentence)) {
-                for ((j, w) in chunk.withIndex()) {
-                    val previous = chunk.getOrNull(j - 1)
-                    val before = chunk.getOrNull(j - 2)
-                    if (previous != null) {
-                        targets++
-                        if (hit(suggester.suggest("", previous, before = before), w)) predicted++
-                    }
-                    if (i % KSR_EVERY != 0) continue
-                    // Keystrokes: type letters until the word is in the strip, then tap it.
-                    val letters = w.codePointCount(0, w.length)
-                    var cost = letters + 1 // all letters, then space
-                    for (k in 0 until letters) {
-                        val prefix = w.substring(0, w.offsetByCodePoints(0, k))
-                        if (k == 0 && previous == null) continue
-                        if (hit(suggester.suggest(prefix, previous, before = before), w)) {
-                            cost = k + 1
-                            break
-                        }
-                    }
-                    typed += cost
-                    full += letters + 1
+            forEachWord(sentence) { w, previous, before, context ->
+                if (previous != null) {
+                    targets++
+                    if (hit(suggester.suggest("", previous, before = before, sentence = context), w)) predicted++
+                    if (model != null && hit(dictOnly.suggest("", previous, before = before), w)) dictPredicted++
                 }
+                if (i % KSR_EVERY != 0) return@forEachWord
+                // Keystrokes: type letters until the word is in the strip, then tap it.
+                val letters = w.codePointCount(0, w.length)
+                var cost = letters + 1 // all letters, then space
+                for (k in 0 until letters) {
+                    val prefix = w.substring(0, w.offsetByCodePoints(0, k))
+                    if (k == 0 && previous == null) continue
+                    if (hit(suggester.suggest(prefix, previous, before = before, sentence = context), w)) {
+                        cost = k + 1
+                        break
+                    }
+                }
+                typed += cost
+                full += letters + 1
             }
         }
-        report("next word in top 3 %.1f%% (%d words)".format(pct(predicted, targets), targets))
+        val alone = if (model != null) " (dictionary alone %.1f%%)".format(pct(dictPredicted, targets)) else ""
+        report("next word in top 3 %.1f%%%s (%d words)".format(pct(predicted, targets), alone, targets))
         report("keystrokes saved %.1f%%".format(100.0 - pct(typed, full)))
+
+        // Conversation: Taskmaster dialogs no model trained on (tools/bench/data/README.md).
+        val conversation = File(data, "conversation_en.txt").takeIf { it.exists() }
+        if (conversation != null) {
+            var hits = 0
+            var dictHits = 0
+            var n = 0
+            for (sentence in conversation.readLines().filter { it.isNotBlank() }) {
+                forEachWord(sentence) { w, previous, before, context ->
+                    if (previous == null) return@forEachWord
+                    n++
+                    if (hit(suggester.suggest("", previous, before = before, sentence = context), w)) hits++
+                    if (model != null && hit(dictOnly.suggest("", previous, before = before), w)) dictHits++
+                }
+            }
+            val convAlone = if (model != null) " (dictionary alone %.1f%%)".format(pct(dictHits, n)) else ""
+            report("next word in conversation %.1f%%%s (%d words)".format(pct(hits, n), convAlone, n))
+        }
         assertTrue("next-word predictions got worse", pct(predicted, targets) >= MIN_NEXT_WORD)
+    }
+
+    /**
+     * Calls [action] for each word of [sentence] with the word before it and the one before that
+     * (within runs without punctuation, like the keyboard's TextContext) and the sentence so far
+     * as the next-word model sees it.
+     */
+    private fun forEachWord(sentence: String, action: (String, String?, String?, List<String>) -> Unit) {
+        val all = WORD.findAll(sentence).toList()
+        val chunks = chunks(sentence)
+        val aligned = chunks.sumOf { it.size } == all.size
+        var g = 0
+        for (chunk in chunks) {
+            for ((j, w) in chunk.withIndex()) {
+                val match = if (aligned) all[g++] else null
+                val context = match?.let { TextContext.sentenceWords(sentence, it.range.first) } ?: emptyList()
+                action(w, chunk.getOrNull(j - 1), chunk.getOrNull(j - 2), context)
+            }
+        }
     }
 
     private fun hit(result: SuggestionResult, word: String) =

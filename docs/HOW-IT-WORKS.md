@@ -30,6 +30,7 @@ typed, learned or logged can be sent anywhere.
 | Tap a letter | `ui/KeyboardScreen.kt` draws the key and reports the tap; the service types the letter |
 | Finish a word with space | `ime/TypingController.kt` asks `predict/Suggester.kt` whether the word needs correcting, replaces it if so, and remembers the change so backspace can undo it |
 | Look at the three suggestions | `predict/Suggester.kt` finds and ranks them; `ime/TypingController.kt` arranges them in the strip |
+| Finish a word and see what might come next | `predict/Suggester.kt` takes the dictionary's likely next words; `predict/NextWordModel.kt` re-ranks them by the whole sentence so far and adds its own guesses |
 | Swipe across letters | `ui/SwipeArea.kt` follows the finger and draws the trail; `predict/SwipeDecoder.kt` turns the path into words |
 | Hold a key | `ui/AlternatesPopup.kt` shows accents, fractions or skin tones; the choices are listed in `layout/KeyboardLayout.kt` |
 | Use the tools row (select all, cut, copy, paste…) | `ui/KeyboardScreen.kt` draws the buttons; `ime/WeftKeyboardService.kt` asks the app to do the edit |
@@ -51,7 +52,8 @@ typed, learned or logged can be sent anywhere.
 - **`KeyboardState.kt`** is the list of things the keys on screen depend on
   (which page, shift, the suggestions…). Changing one redraws what uses it.
 - **`FieldPolicy.kt`** decides, for each text field, what prediction may do.
-- **`DictionaryLoader.kt`** finds the word list in the app and opens it.
+- **`DictionaryLoader.kt`** finds the word list and the next-word model in the
+  app and opens them.
 - **`LearnedStore.kt`** makes sure the keyboard and the settings screen use
   the same copy of what was learned.
 - **`KeyboardLog.kt`** keeps the troubleshooting log (Settings › About): when
@@ -67,6 +69,10 @@ benchmarked on any computer.
 - **`Suggester.kt`** finds dictionary words close to what was typed and ranks
   them. This is where suggestions, autocorrect and next-word predictions come
   from.
+- **`NextWordModel.kt`** is a small neural network (about 6 MB) that reads the
+  sentence so far and scores every word it knows as the next one. It runs in
+  plain Kotlin, a few milliseconds per word; `Suggester.kt` mixes its scores
+  into next-word predictions.
 - **`KeyProximity.kt`** knows which keys are neighbours, so hitting "r" for
   "e" counts as a small slip and "p" for "e" as a big one.
 - **`SwipeDecoder.kt`** turns a swiped path into words, using the shape of the
@@ -76,7 +82,7 @@ benchmarked on any computer.
   undid, words you removed, and your swiping habits. Saved in two small files
   in the app's private storage.
 - **`TextContext.kt`** works out, from the text before the cursor, which word
-  is being typed and what came before it.
+  is being typed, what came before it, and the sentence so far.
 
 ### `layout/` — what is on the keyboard
 
@@ -111,11 +117,15 @@ benchmarked on any computer.
 
 ## Where the data comes from
 
-The dictionary and emoji list are not written by hand. Scripts build them from
-open data, and the results are stored in the app:
+The dictionary, next-word model and emoji list are not written by hand.
+Scripts build them from open data, and the results are stored in the app:
 
 - **`tools/dictgen/`** builds the dictionaries (`app/src/main/assets/dictionaries/`).
   Its [README](../tools/dictgen/README.md) lists every source and its license.
+- **`tools/nextword/`** trains the next-word model (`app/src/main/assets/models/`)
+  on the same open sentences plus Google's Taskmaster conversations, and
+  records how much it helps in `RESULTS.md`. Its [README](../tools/nextword/README.md)
+  explains how.
 - **`tools/emojigen/`** builds the emoji list (`app/src/main/assets/emoji/`).
 - **`tools/bench/`** prepares the test sentences used to measure accuracy.
 
@@ -129,7 +139,9 @@ measurements that run on every build and print their scores:
 
 - **`TypingBenchmarkTest`** types real sentences and real misspellings and
   reports how many typos were fixed, how many correct words were wrongly
-  changed (this must stay at zero), and how many key presses predictions save.
+  changed (this must stay at zero), how often the next word is among the
+  predictions (in ordinary sentences and in conversation), and how many key
+  presses predictions save.
 - **`SwipeAccuracyTest`** draws thousands of simulated swipes (neat, natural
   and hurried) and reports how often the right word comes out first.
 

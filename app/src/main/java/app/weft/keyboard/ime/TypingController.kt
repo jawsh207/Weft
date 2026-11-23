@@ -133,7 +133,7 @@ class TypingController(private val learned: LearnedWords) {
     fun compute(ctx: WordContext): SuggestionResult {
         val s = suggester
         if (!suggestionsEnabled || s == null) return SuggestionResult.EMPTY
-        return s.suggest(ctx.fragment, ctx.previous, before = ctx.before)
+        return s.suggest(ctx.fragment, ctx.previous, before = ctx.before, sentence = ctx.sentence)
     }
 
     /** Remembers [result] (so space can reuse it) and returns chips for the strip. */
@@ -465,8 +465,11 @@ class TypingController(private val learned: LearnedWords) {
     }
 
     companion object {
-        /** How much text before the cursor is read to find the current and previous words. */
-        const val CONTEXT_CHARS = 64
+        /**
+         * How much text before the cursor is read: the current and previous words, and the sentence
+         * so far for the next-word model.
+         */
+        const val CONTEXT_CHARS = 200
 
         private val LOWER_I = Regex("i(?:['’](?:m|ll|ve|d))?")
 

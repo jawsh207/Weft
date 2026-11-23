@@ -123,7 +123,9 @@ base64 -w0 weft.jks   # on macOS: base64 -i weft.jks
 3. The dictionary is built by the Dictionary workflow and committed to
    `app/src/main/assets/dictionaries/`. To rebuild it locally:
    `python3 tools/dictgen/make_dict.py en_US` (see
-   [tools/dictgen/README.md](tools/dictgen/README.md)).
+   [tools/dictgen/README.md](tools/dictgen/README.md)). The next-word model
+   is trained by the Next-word model workflow and committed to
+   `app/src/main/assets/models/` (see [tools/nextword/README.md](tools/nextword/README.md)).
 4. Run the `app` configuration on an Android 16+ device or emulator.
 5. Follow the setup screen to enable the keyboard.
 
@@ -143,7 +145,7 @@ that keep it that way.
 ```
 app/src/main/java/app/weft/keyboard/
 ├── ime/        WeftKeyboardService (the IME), TypingController, KeyboardState, KeyboardLog
-├── predict/    Dictionary, fuzzy search, ranking, learned words, swipe decoder (no Android deps)
+├── predict/    Dictionary, fuzzy search, ranking, next-word model, learned words, swipe decoder (no Android deps)
 ├── layout/     Key model, page layouts and key geometry
 ├── ui/         Compose keyboard, key button with Expressive motion
 ├── theme/      SystemTheme: dynamic color + MaterialExpressiveTheme
@@ -176,7 +178,7 @@ app/src/main/java/app/weft/keyboard/
   GitHub gemoji (MIT), built by [tools/emojigen](tools/emojigen/build_emoji.py)
   with each source's license shipped as `assets/emoji/LICENSE-*.txt`, plus
   Weft's own [extra_keywords.tsv](tools/emojigen/extra_keywords.tsv).
-- Dictionary data must come from openly licensed sources with no share-alike
+- Dictionary and model training data must come from openly licensed sources with no share-alike
   or copyleft terms (see [tools/dictgen/README.md](tools/dictgen/README.md)),
   and every source is credited in the app and in [NOTICE](NOTICE).
 - Stays F-Droid compatible (dependency metadata blob is already disabled).
@@ -188,7 +190,7 @@ on: see [LICENSE](LICENSE). It is distributed on an "AS IS" basis, WITHOUT
 WARRANTIES OR CONDITIONS OF ANY KIND. Releases up to v0.11.0 were published
 under GPL-3.0-only and stay available under that license.
 
-The bundled dictionaries and emoji list are built from third-party data that
+The bundled dictionaries, next-word model and emoji list are built from third-party data that
 keeps its own licenses (Apache 2.0, CC0, MIT-style, Unicode, and CC BY, which
 requires credit). None of it is share-alike. [NOTICE](NOTICE) lists every
 source; the app credits them in Settings › About.

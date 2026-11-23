@@ -1,0 +1,132 @@
+name: Next-word model
+
+# Trains the next-word model (tools/nextword, see its README): two variants on
+# different training text, each measured as the keyboard will run it. The
+# better one is committed as app/src/main/assets/models/next_en.wlmz with
+# tools/nextword/RESULTS.md, and Build then runs on that commit.
+#
+# Runs when tools/nextword changes on main, or from the Actions tab. Training
+# takes two to four hours.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "tools/nextword/**"
+      - "!tools/nextword/RESULTS.md"
+      - ".github/workflows/next-word-model.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: next-word-model
+  cancel-in-progress: true
+
+jobs:
+  # Training text, and the dictionary's candidates for every benchmark position.
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Restore downloaded sources
+        uses: actions/cache@v4
+        with:
+          path: tools/dictgen/cache
+          key: nextword-sources-${{ hashFiles('tools/dictgen/sources/*.json', 'tools/nextword/prepare.py') }}
+          restore-keys: |
+            nextword-sources-
+            dictgen-
+      - name: Training text
+        run: |
+          python3 tools/nextword/prepare.py data --news 300000
+          wc -l data/*.txt
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Install Android SDK packages
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37" "build-tools;36.0.0" || true
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Dictionary candidates for each benchmark position
+        run: |
+          WEFT_NEXT_WORD_DUMP="$PWD/data/bench.jsonl" ./gradlew --no-daemon testDebugUnitTest \
+            --tests app.weft.keyboard.predict.NextWordDumpTest
+          WEFT_NEXT_WORD_SENTENCES=conversation_en.txt WEFT_NEXT_WORD_DUMP="$PWD/data/conversation.jsonl" \
+            ./gradlew --no-daemon testDebugUnitTest --tests app.weft.keyboard.predict.NextWordDumpTest --rerun
+          wc -l data/*.jsonl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nextword-data
+          path: data/
+
+  train:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [general, conversation]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v4
+        with:
+          name: nextword-data
+          path: data
+      - name: Install PyTorch (CPU)
+        run: pip install -q numpy torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+      - name: Train and measure
+        run: |
+          mkdir -p out
+          python3 tools/nextword/train.py ${{ matrix.variant }} data out/${{ matrix.variant }}.wlm \
+            out/${{ matrix.variant }}.json --dump data/bench.jsonl \
+            --conversation-dump data/conversation.jsonl --minutes 240
+      - name: Show result
+        if: always()
+        run: |
+          [ -f out/${{ matrix.variant }}.json ] && echo "::notice title=${{ matrix.variant }}::$(python3 -c "import json,sys; r=json.load(open(sys.argv[1])); print('sentences', r['sentences'], 'conversation', r['conversation'], 'perplexity', r['validation_perplexity'])" out/${{ matrix.variant }}.json)" || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: model-${{ matrix.variant }}
+          path: out/
+
+  ship:
+    needs: train
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: model-*
+          merge-multiple: true
+          path: out
+      - name: Pick the better model
+        run: python3 tools/nextword/choose.py out
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/assets/models/next_en.wlmz tools/nextword/RESULTS.md
+          if git diff --cached --quiet; then
+            echo "Model unchanged."
+          else
+            git commit -m "Update next-word model"
+            git pull --rebase -q origin main
+            git push
+          fi

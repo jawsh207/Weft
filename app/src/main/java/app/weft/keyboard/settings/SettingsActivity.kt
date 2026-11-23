@@ -661,6 +661,10 @@ private fun DictionaryInfo() {
         }
     }
     val meta = metaState.value
+    // What the next-word model learned from (credit for its CC BY training text).
+    val modelSources = produceState<String?>(null) {
+        value = withContext(Dispatchers.IO) { DictionaryLoader.loadNextWordModel(context)?.sources }
+    }.value
     SectionCard(stringResource(R.string.settings_dictionary_title)) {
         Column(
             Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
@@ -703,6 +707,13 @@ private fun DictionaryInfo() {
                         color = MaterialTheme.colorScheme.primary,
                     )
                 }
+            }
+            if (modelSources != null) {
+                Text(
+                    stringResource(R.string.settings_next_word_model, modelSources),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }

@@ -43,6 +43,7 @@ import app.weft.keyboard.layout.KeyboardPage
 import app.weft.keyboard.layout.Layouts
 import app.weft.keyboard.predict.KeyProximity
 import app.weft.keyboard.predict.LearnedWords
+import app.weft.keyboard.predict.NextWordModel
 import app.weft.keyboard.predict.Suggester
 import app.weft.keyboard.predict.SwipeDecoder
 import app.weft.keyboard.predict.TextContext
@@ -317,12 +318,26 @@ class WeftKeyboardService :
                 val dict = DictionaryLoader.load(this@WeftKeyboardService, locale)
                 val centers = KeyGeometry.centers(Layouts.qwerty)
                 swipeDecoder = SwipeDecoder(dict, centers, learned)
-                Suggester(dict, KeyProximity(centers), learned)
+                Suggester(dict, KeyProximity(centers), learned, nextWordModel())
             }
             typing.suggester = suggester
             state.swipeEnabled = swipeAllowed && swipeDecoder != null
             refreshSuggestions()
         }
+    }
+
+    /** The English next-word model, opened on first use and shared by every English variant. */
+    private var model: NextWordModel? = null
+    private var modelLoaded = false
+
+    /** Opens the next-word model the first time (off the main thread); null if the build has none. */
+    @Synchronized
+    private fun nextWordModel(): NextWordModel? {
+        if (!modelLoaded) {
+            model = DictionaryLoader.loadNextWordModel(this)
+            modelLoaded = true
+        }
+        return model
     }
 
     /** The user switched keyboard language (US, UK, Canada, Australia): load that dictionary. */

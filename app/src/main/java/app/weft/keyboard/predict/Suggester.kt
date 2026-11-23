@@ -57,6 +57,10 @@ data class SuggestionResult(
  * Autocorrect is deliberately cautious: real words, names, acronyms and
  * anything the user has kept as typed are left alone.
  *
+ * Next-word predictions start from the dictionary's word pairs and triples. With a
+ * [NextWordModel], which reads the whole sentence so far, each of those is re-ranked by how
+ * likely the model finds it, and the model's own likeliest words can join them.
+ *
  * How the search works: it walks the dictionary's letter tree carrying one row
  * of an edit-distance table (Damerau-Levenshtein, with key distance as the
  * substitution cost) down each branch, and abandons a branch as soon as every
@@ -66,13 +70,22 @@ class Suggester(
     private val dictionary: BinaryDictionary?,
     private val proximity: KeyProximity,
     private val learned: LearnedWords,
+    /** Ranks next-word predictions by the whole sentence; null leaves them to the dictionary alone. */
+    private val model: NextWordModel? = null,
 ) {
 
     /**
      * Suggestions for [typed] (the word being typed, maybe empty) after
-     * [previous] and, before that, [before] (the word two back).
+     * [previous] and, before that, [before] (the word two back). [sentence] is every word of the
+     * sentence before [typed], for the next-word model; empty means just [before] and [previous].
      */
-    fun suggest(typed: String, previous: String?, limit: Int = 3, before: String? = null): SuggestionResult {
+    fun suggest(
+        typed: String,
+        previous: String?,
+        limit: Int = 3,
+        before: String? = null,
+        sentence: List<String> = emptyList(),
+    ): SuggestionResult {
         val dict = dictionary
         val prevNode = if (dict != null && previous != null) dict.findIgnoreCase(previous) else -1
         val prev2Node = if (dict != null && before != null && prevNode >= 0 && dict.hasTrigrams) {
@@ -83,7 +96,8 @@ class Suggester(
 
         if (typed.isEmpty()) {
             if (previous == null) return SuggestionResult.EMPTY
-            return SuggestionResult("", predict(dict, prev2Node, prevNode, previous, limit), true, null)
+            val words = sentence.ifEmpty { listOfNotNull(before, previous) }
+            return SuggestionResult("", predict(dict, prev2Node, prevNode, previous, words, limit), true, null)
         }
 
         val t = typed.lowercase().codePoints().toArray()
@@ -252,6 +266,7 @@ class Suggester(
         prev2Node: Int,
         prevNode: Int,
         previous: String,
+        sentence: List<String>,
         limit: Int,
     ): List<Suggestion> {
         val found = HashMap<String, Suggestion>()
@@ -286,7 +301,45 @@ class Suggester(
             if (dict != null && dict.findIgnoreCase(word).let { it >= 0 && dict.isOffensive(it) }) continue
             offer(display, PERSONAL_PREDICTION_BASE + learned.pairBoost(previous, word) + learned.boost(word) + uses * 0.01f)
         }
-        return found.values.sortedWith(compareByDescending<Suggestion> { it.score }.thenBy { it.word }).take(limit)
+        val ranked = found.values.sortedWith(compareByDescending<Suggestion> { it.score }.thenBy { it.word })
+        val m = model ?: return ranked.take(limit)
+        return withModel(m, dict, ranked.take(MODEL_CANDIDATES), sentence, limit)
+    }
+
+    /**
+     * Re-ranks the dictionary's best next-word [candidates] with the model: each gets weight ×
+     * the model's log-probability for it, and the model's own likeliest words (dictionary words
+     * only) join in, starting a little below the weakest candidate. The weight and offset come from
+     * the model file, tuned by tools/nextword/train.py with exactly this rule (common.top3).
+     */
+    private fun withModel(
+        m: NextWordModel,
+        dict: BinaryDictionary?,
+        candidates: List<Suggestion>,
+        sentence: List<String>,
+        limit: Int,
+    ): List<Suggestion> {
+        val p = m.predict(sentence)
+        // In order: the dictionary's candidates as it ranked them, then the model's guesses. On
+        // equal scores the earlier one wins, as in the tuning (a stable sort in common.top3).
+        val out = LinkedHashMap<String, Suggestion>()
+        for (c in candidates) {
+            out[c.word.lowercase()] = c.copy(score = c.score + m.weight * p.logProb(c.word))
+        }
+        if (dict != null) {
+            val base = (candidates.minOfOrNull { it.score } ?: 0f) - m.offset
+            var added = 0
+            for ((word, logProb) in p.top(MODEL_TOP)) {
+                if (added >= MODEL_GUESSES) break
+                val node = dict.findIgnoreCase(word)
+                if (node < 0 || dict.freq(node) == 0 || dict.isOffensive(node)) continue
+                added++
+                val display = dict.word(node)
+                if (word in out || learned.isRemoved(display)) continue
+                out[word] = Suggestion(display, SuggestionKind.Prediction, base + m.weight * logProb, 0f)
+            }
+        }
+        return out.values.sortedByDescending { it.score }.take(limit)
     }
 
     // --- Scoring -----------------------------------------------------------------------------
@@ -550,6 +603,12 @@ class Suggester(
 
         /** Score of a word pair the user has typed twice, before its boosts; strong dictionary pairs reach ~8.6. */
         const val PERSONAL_PREDICTION_BASE = 7f
+
+        // Next-word model (tools/nextword/common.py uses the same numbers): how many dictionary
+        // candidates it re-ranks, and how many of its own top words it looks at and may add.
+        const val MODEL_CANDIDATES = 30
+        const val MODEL_TOP = 40
+        const val MODEL_GUESSES = 20
         /** A correction scoring below this is offered in the strip but not applied by space. */
         const val MIN_AUTOCORRECT_SCORE = 0.75f
 

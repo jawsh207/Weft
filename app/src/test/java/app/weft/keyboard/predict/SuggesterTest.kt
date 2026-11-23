@@ -216,14 +216,17 @@ class SuggesterTest {
 
     @Test
     fun parsesContext() {
-        assertEquals(WordContext("wor", "Hello"), TextContext.parse("Hello wor"))
+        assertEquals(WordContext("wor", "Hello", sentence = listOf("Hello")), TextContext.parse("Hello wor"))
         assertEquals(WordContext("wor", null), TextContext.parse("Hi. wor"))
-        assertEquals(WordContext("", "I", "so"), TextContext.parse("so I "))
-        assertEquals(WordContext("", "I", null), TextContext.parse("Yes, I "))
-        assertEquals(WordContext("go", "to", "want"), TextContext.parse("I want to go"))
+        assertEquals(WordContext("", "I", "so", listOf("so", "I")), TextContext.parse("so I "))
+        // The sentence carries across commas even though the word pair doesn't.
+        assertEquals(WordContext("", "I", null, listOf("Yes", "I")), TextContext.parse("Yes, I "))
+        assertEquals(WordContext("go", "to", "want", listOf("I", "want", "to")), TextContext.parse("I want to go"))
         assertEquals(WordContext("don't", null), TextContext.parse("don't"))
         assertEquals(WordContext("", null), TextContext.parse(""))
         assertEquals(WordContext("x", null), TextContext.parse("'x"))
+        assertEquals(listOf("so", "I’ll", "see", "you"), TextContext.parse("Done!\nOK. so I’ll see 2 you ").sentence)
+        assertEquals(listOf("we", "met"), TextContext.parse("Hi?? we met ").sentence)
         assertTrue(TextContext.isSeparator(" "))
         assertTrue(TextContext.isSeparator(","))
         assertFalse(TextContext.isSeparator("a"))
@@ -300,6 +303,36 @@ class SuggesterTest {
         assertEquals("later", suggester.suggest("", "you", before = "see").suggestions.first().word)
         // Typing too: "l" after "see you" completes to "later".
         assertEquals("later", suggester.suggest("lat", "you", before = "see").suggestions.first().word)
+    }
+
+    @Test
+    fun nextWordModelReranksAndAddsDictionaryWords() {
+        // The fixture model (tools/nextword/make_fixture.py) is random but knows some real words.
+        val modelBytes = javaClass.classLoader!!.getResourceAsStream("next_word_fixture.wlm")!!.readBytes()
+        val model = NextWordModel(ByteBuffer.wrap(modelBytes))
+        val withModel = Suggester(dict, KeyProximity(KeyGeometry.centers(Layouts.qwerty)), learned, model)
+        val sentence = listOf("I", "will", "see", "you")
+
+        // The rule tools/nextword/common.py tuned the weight for, worked out by hand.
+        val cands = suggester.suggest("", "you", limit = Suggester.MODEL_CANDIDATES, before = "see").suggestions
+        val p = model.predict(sentence)
+        val scores = LinkedHashMap<String, Float>()
+        for (c in cands) scores[c.word.lowercase()] = c.score + model.weight * p.logProb(c.word)
+        val base = cands.minOf { it.score } - model.offset
+        p.top(Suggester.MODEL_TOP)
+            .filter { (w, _) -> dict.findIgnoreCase(w).let { it >= 0 && dict.freq(it) > 0 && !dict.isOffensive(it) } }
+            .take(Suggester.MODEL_GUESSES)
+            .forEach { (w, lp) -> scores.putIfAbsent(w, base + model.weight * lp) }
+        val expected = scores.entries.sortedByDescending { it.value }.take(3).map { it.key }
+
+        val got = withModel.suggest("", "you", before = "see", sentence = sentence).suggestions
+        assertEquals(expected, got.map { it.word.lowercase() })
+        assertTrue(got.all { it.kind == SuggestionKind.Prediction && dict.findIgnoreCase(it.word) >= 0 })
+        // Typing a word doesn't involve the model.
+        assertEquals(
+            suggester.suggest("lat", "you", before = "see").suggestions,
+            withModel.suggest("lat", "you", before = "see", sentence = sentence).suggestions,
+        )
     }
 
     @Test
