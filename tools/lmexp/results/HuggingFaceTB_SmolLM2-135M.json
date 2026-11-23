@@ -1,0 +1,26 @@
+{
+ "rerank": {
+  "top1": 28.2,
+  "top3": 42.5,
+  "weight": 0.5,
+  "offset": 0
+ },
+ "open": {
+  "top1": 29.9,
+  "top3": 46.3,
+  "weight": 1,
+  "offset": 0
+ },
+ "baseline": {
+  "top1": 23.9,
+  "top3": 36.8
+ },
+ "ceiling_top30": 58.3,
+ "test_positions": 1731,
+ "model": "HuggingFaceTB/SmolLM2-135M",
+ "params_m": 134.5,
+ "onnx_int8_mb": 168.4,
+ "size_note": "ONNX int8 file + tokenizer",
+ "ms_per_prediction": 184.6,
+ "license": "apache-2.0"
+}

@@ -1,0 +1,29 @@
+{
+ "rerank": {
+  "top1": 28.5,
+  "top3": 43.2,
+  "weight": 5,
+  "offset": 0
+ },
+ "open": {
+  "top1": 29.1,
+  "top3": 45.1,
+  "weight": 5,
+  "offset": 0
+ },
+ "baseline": {
+  "top1": 23.9,
+  "top3": 36.8
+ },
+ "ceiling_top30": 58.3,
+ "test_positions": 1731,
+ "model": "Weft own M (word LSTM)",
+ "params_m": 5.6,
+ "onnx_int8_mb": 6.0,
+ "size_note": "ONNX int8 file",
+ "ms_per_prediction": 0.4,
+ "license": "Apache-2.0 (trained here on Tatoeba, Common Voice, Leipzig: CC BY / CC0)",
+ "train_tokens_m": 73.0,
+ "train_minutes": 72,
+ "vocab": 30000
+}

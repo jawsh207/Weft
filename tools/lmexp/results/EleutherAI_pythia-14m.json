@@ -1,0 +1,26 @@
+{
+ "rerank": {
+  "top1": 25.2,
+  "top3": 38.0,
+  "weight": 0.2,
+  "offset": 0
+ },
+ "open": {
+  "top1": 25.0,
+  "top3": 38.1,
+  "weight": 0.2,
+  "offset": 0
+ },
+ "baseline": {
+  "top1": 23.9,
+  "top3": 36.8
+ },
+ "ceiling_top30": 58.3,
+ "test_positions": 1731,
+ "model": "EleutherAI/pythia-14m",
+ "params_m": 14.1,
+ "onnx_int8_mb": 18.0,
+ "size_note": "ONNX int8 file + tokenizer",
+ "ms_per_prediction": 18.9,
+ "license": "apache-2.0"
+}
