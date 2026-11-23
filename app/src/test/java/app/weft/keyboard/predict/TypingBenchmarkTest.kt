@@ -192,8 +192,9 @@ class TypingBenchmarkTest {
 
         // Floors, set a little below the last measured results.
         // Before the benchmark existed (Oct 2026): fixed 35.9%, next word 22.3%, keystrokes saved 39.8%.
+        // Next word was 36.8% with the dictionary alone, 44.8% with the next-word model (Nov 2026).
         const val MIN_FIXED = 65.0
         const val MAX_FALSE = 0.5
-        const val MIN_NEXT_WORD = 33.0
+        const val MIN_NEXT_WORD = 42.0
     }
 }
