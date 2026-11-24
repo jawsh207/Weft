@@ -134,25 +134,49 @@ class TypingControllerTest {
     @Test
     fun swipedWordsGetSpacedAutomatically() {
         controller.onSwipe(editor, listOf("hello", "help"))
-        assertEquals("hello", editor.toString())
+        assertEquals("hello ", editor.toString()) // the space goes in as the finger lifts
         controller.onSwipe(editor, listOf("there"))
-        assertEquals("hello there", editor.toString())
-        controller.onText(editor, "x") // tapping after a swipe starts a new word
+        assertEquals("hello there ", editor.toString())
+        controller.onText(editor, "x")
         assertEquals("hello there x", editor.toString())
+        val e = FakeEditor().apply { insert("I said") }
+        controller.onSwipe(e, listOf("hello"))
+        assertEquals("I said hello ", e.toString())
+    }
+
+    @Test
+    fun stripPredictsTheNextWordRightAfterASwipe() {
+        controller.onSwipe(editor, listOf("for", "four"))
+        val ctx = controller.context(editor)
+        assertEquals("", ctx.fragment)
+        assertEquals("for", ctx.previous) // predictions follow the swiped word
+        val chips = controller.publish(controller.compute(ctx))
+        assertFalse(chips.any { it?.text == "four" }) // not the swipe's other guesses
+    }
+
+    @Test
+    fun spaceAfterASwipeIsNotDoubled() {
+        controller.onSwipe(editor, listOf("hello"))
+        controller.onSeparator(editor, " ")
+        assertEquals("hello ", editor.toString())
     }
 
     @Test
     fun punctuationAttachesToSwipedWord() {
         controller.onSwipe(editor, listOf("hello"))
         controller.onSeparator(editor, ".")
-        assertEquals("hello.", editor.toString())
+        assertEquals("hello. ", editor.toString())
     }
 
     @Test
-    fun deleteRemovesWholeSwipedWord() {
+    fun backspaceBringsBackGuessesThenDeletesWholeSwipedWord() {
         editor.insert("I said")
-        controller.onSwipe(editor, listOf("hello"))
+        controller.onSwipe(editor, listOf("hello", "help", "hell"))
+        assertEquals("I said hello ", editor.toString())
+        assertTrue(controller.onBackspace(editor))
         assertEquals("I said hello", editor.toString())
+        val chips = controller.publish(controller.compute(controller.context(editor)))
+        assertEquals(listOf("help", "hello", "hell"), chips.map { it?.text })
         assertTrue(controller.onBackspace(editor))
         assertEquals("I said ", editor.toString())
     }
@@ -160,12 +184,13 @@ class TypingControllerTest {
     @Test
     fun stripOffersOtherGuessesAndSwaps() {
         controller.onSwipe(editor, listOf("for", "four", "fir"))
+        controller.onBackspace(editor)
         val chips = controller.publish(controller.compute(controller.context(editor)))
         assertEquals(listOf("four", "for", "fir"), chips.map { it?.text })
         controller.onPick(editor, chips[0]!!)
-        assertEquals("four", editor.toString())
+        assertEquals("four ", editor.toString()) // the space comes back with the swap
         controller.onSwipe(editor, listOf("seasons"))
-        assertEquals("four seasons", editor.toString())
+        assertEquals("four seasons ", editor.toString())
     }
 
     @Test
@@ -254,6 +279,7 @@ class TypingControllerTest {
     fun swipedWordIsLearnedOnceTheUserMovesOn() {
         controller.onSwipe(editor, listOf("for", "four"))
         assertEquals(0f, learned.boost("for"), 0f) // might still be swapped or deleted
+        controller.onBackspace(editor)
         controller.onPick(editor, SuggestionChip("four"))
         controller.onSwipe(editor, listOf("you"))
         assertTrue(learned.boost("four") > 0f)
@@ -265,6 +291,7 @@ class TypingControllerTest {
     @Test
     fun deletedSwipeIsNotLearned() {
         controller.onSwipe(editor, listOf("hello"))
+        controller.onBackspace(editor)
         controller.onBackspace(editor)
         controller.onSwipe(editor, listOf("help"))
         assertEquals(0f, learned.boost("hello"), 0f)
@@ -433,6 +460,7 @@ class TypingControllerTest {
     fun aSwappedSwipeTeachesThePick() {
         watchSwipes()
         controller.onSwipe(editor, listOf("for", "four"), pts.first, pts.second)
+        controller.onBackspace(editor)
         controller.onPick(editor, SuggestionChip("four"))
         controller.onSwipe(editor, listOf("you"), pts.first, pts.second)
         assertEquals(listOf("four" to "for"), kept)
@@ -442,6 +470,7 @@ class TypingControllerTest {
     fun aDeletedSwipeTeachesNothing() {
         watchSwipes()
         controller.onSwipe(editor, listOf("for"), pts.first, pts.second)
+        controller.onBackspace(editor)
         controller.onBackspace(editor)
         controller.onSwipe(editor, listOf("you"), pts.first, pts.second)
         assertEquals(emptyList<Pair<String, String>>(), kept.dropLast(0).filter { it.first == "for" })

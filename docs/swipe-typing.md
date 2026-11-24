@@ -24,9 +24,11 @@ Code: `predict/SwipeDecoder.kt` (decoder, no Android dependencies),
    location (average distance), shape (after normalizing position and size)
    and endpoints. Combined with word frequency and the previous word
    (bigrams). Weights are in `SwipeDecoder.Tuning`.
-5. **Typing.** The best word is typed with a space before it if needed; the
-   next tapped letter starts a new word automatically; delete removes the whole
-   swiped word; the strip offers the next guesses, and tapping one swaps it in.
+5. **Typing.** The best word is typed with a space before it if needed and one
+   after it, so the strip shows next-word predictions as soon as the finger
+   lifts (`.` or `,` typed next goes before that space). The first delete takes
+   the space back and the strip offers the other guesses; tapping one swaps it
+   in, space included. A second delete removes the whole swiped word.
 
 ## Measuring
 

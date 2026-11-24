@@ -65,8 +65,9 @@ Released and working:
   moves it after the punctuation
 - **Swipe typing** with Weft's own open source decoder: a tapering trail
   follows your finger, letters light up as you cross them, the best guess
-  floats above your finger and previews in the strip, other guesses wait beside
-  it, and delete removes a swiped word whole. It learns your swipes on the
+  floats above your finger and previews in the strip, and the word goes in with
+  its space so next-word predictions show right away. Delete once to see the
+  other guesses, twice to remove the swiped word whole. It learns your swipes on the
   phone: where your thumb tends to land, and which look-alike you mean ("four"
   over "for"). See [docs/swipe-typing.md](docs/swipe-typing.md)
 

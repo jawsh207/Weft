@@ -92,6 +92,12 @@ class TypingController(private val learned: LearnedWords) {
         /** The swipe as drawn, for learning the user's habits once they move on. */
         val xs: FloatArray? = null,
         val ys: FloatArray? = null,
+        /**
+         * The automatic space after the word is still there. True right after the swipe (the strip
+         * shows next-word predictions); false once backspace has removed it to bring the other
+         * guesses back.
+         */
+        val spaced: Boolean = true,
     )
 
     /**
@@ -105,8 +111,6 @@ class TypingController(private val learned: LearnedWords) {
     /** The swipe still open to being swapped or deleted (see [Swiped]). */
     private var swiped: Swiped? = null
 
-    /** After a swipe, the next tapped letter starts a new word with a space. */
-    private var phantomSpace = false
     /** Undone corrections this session (also remembered for good when learning is allowed). */
     private val rejected = HashSet<String>()
 
@@ -120,7 +124,6 @@ class TypingController(private val learned: LearnedWords) {
         lastResult = null
         finishSwipe()
         lastWord = null
-        phantomSpace = false
     }
 
     /** The word being typed and the two words before it, read from the text before the cursor. */
@@ -168,12 +171,16 @@ class TypingController(private val learned: LearnedWords) {
     @Volatile
     private var lastWord: String? = null
 
-    /** The strip for [result]: after a swipe its other guesses, otherwise suggestions for the typed word. */
+    /**
+     * The strip for [result]: next-word predictions after a swipe (its space is already typed), the
+     * swipe's other guesses once backspace has taken that space back, otherwise suggestions for
+     * the typed word.
+     */
     private fun wordChips(result: SuggestionResult): List<SuggestionChip?> {
         val words = result.suggestions.map { it.word }
         val swipe = swiped
-        if (swipe != null && result.typed == swipe.word) {
-            // Right after a swipe: the word in the middle, the decoder's other guesses beside it.
+        if (swipe != null && !swipe.spaced && result.typed == swipe.word) {
+            // Backspace took the swipe's space back: the word in the middle, the other guesses beside it.
             val others = swipe.alternatives.filter { it != swipe.word }
             return listOf(
                 others.getOrNull(0)?.let { SuggestionChip(it) },
@@ -214,19 +221,15 @@ class TypingController(private val learned: LearnedWords) {
         autoSpaced = false
         finishSwipe()
         lastWord = null
-        if (phantomSpace) {
-            phantomSpace = false
-            editor.insert(" $text")
-        } else {
-            editor.insert(text)
-        }
+        editor.insert(text)
     }
 
     /**
      * Types a swiped word: [candidates] best first, already in the right case.
-     * Adds a space before it if it would otherwise join the previous word, and
-     * remembers it so delete can remove it whole and the strip can offer the
-     * other guesses.
+     * Adds a space before it if it would otherwise join the previous word, and one
+     * after it straight away, so the strip can predict the next word as soon as the
+     * finger lifts. Remembers it so backspace can bring back the other guesses (first
+     * press) or remove it whole (second press).
      */
     fun onSwipe(editor: TextEditor, candidates: List<String>, xs: FloatArray? = null, ys: FloatArray? = null) {
         val word = candidates.firstOrNull() ?: return
@@ -236,11 +239,13 @@ class TypingController(private val learned: LearnedWords) {
         val ctx = context(editor)
         val before = editor.textBeforeCursor(1)?.toString().orEmpty()
         val needsSpace = before.isNotEmpty() && !before.last().isWhitespace() && before.last() !in OPENERS
-        editor.insert(if (needsSpace) " $word" else word)
+        editor.insert(if (needsSpace) " $word " else "$word ")
         // The word this one follows: the one right before the cursor, or the one before a space.
         val previous = if (needsSpace) ctx.fragment.ifEmpty { null } else ctx.previous
         swiped = Swiped(word, candidates, previous, xs, ys)
-        phantomSpace = true
+        // Like a picked suggestion: "." or "," typed next goes before the space.
+        autoSpaced = true
+        lastWord = word
     }
 
     /**
@@ -250,10 +255,10 @@ class TypingController(private val learned: LearnedWords) {
      */
     fun onSeparator(editor: TextEditor, separator: String) {
         lastCorrection = null
-        // A swiped word ending here is kept (the word itself is learned below, as typed text).
-        swiped?.let(::learnSwipe)
+        // A swiped word ending here is kept. If its space was taken back it is the word being
+        // typed and is learned below as typed text; otherwise it is learned now.
+        swiped?.let { if (it.spaced) finishSwipe() else learnSwipe(it) }
         swiped = null
-        phantomSpace = false
         if (autoSpaced) {
             autoSpaced = false
             val endsWithSpace = editor.textBeforeCursor(1)?.toString() == " "
@@ -294,11 +299,18 @@ class TypingController(private val learned: LearnedWords) {
         val c = lastCorrection
         lastCorrection = null
         autoSpaced = false
-        phantomSpace = false
         val swipe = swiped
         swiped = null
-        if (swipe != null && editor.textBeforeCursor(swipe.word.length)?.toString() == swipe.word) {
-            // A swiped word goes in one press, like it came in.
+        if (swipe != null && swipe.spaced &&
+            editor.textBeforeCursor(swipe.word.length + 1)?.toString() == swipe.word + " "
+        ) {
+            // First press after a swipe: take the space back so the strip offers the other guesses.
+            editor.deleteBefore(1)
+            swiped = swipe.copy(spaced = false)
+            return true
+        }
+        if (swipe != null && !swipe.spaced && editor.textBeforeCursor(swipe.word.length)?.toString() == swipe.word) {
+            // Second press: the swiped word goes whole, like it came in.
             editor.deleteBefore(swipe.word.length)
             return true
         }
@@ -326,18 +338,19 @@ class TypingController(private val learned: LearnedWords) {
         val ctx = context(editor)
         lastCorrection = null
         val swipe = swiped
-        if (swipe != null && ctx.fragment == swipe.word) {
-            // Swap the swiped word for another guess; keep the other guesses on offer.
+        if (swipe != null && !swipe.spaced && ctx.fragment == swipe.word) {
+            // Swap the swiped word for another guess and put the space back; backspace still
+            // brings the guesses back.
             editor.batch {
                 editor.deleteBefore(swipe.word.length)
-                editor.insert(chip.text)
+                editor.insert(chip.text + " ")
             }
-            swiped = swipe.copy(word = chip.text)
-            phantomSpace = true
+            swiped = swipe.copy(word = chip.text, spaced = true)
+            autoSpaced = true
+            lastWord = chip.text
             return
         }
         finishSwipe()
-        phantomSpace = false
         editor.batch {
             if (ctx.fragment.isNotEmpty()) editor.deleteBefore(ctx.fragment.length)
             editor.insert(chip.text + " ")
@@ -360,7 +373,7 @@ class TypingController(private val learned: LearnedWords) {
         lastCorrection = null
         val swipe = swiped
         val word = when {
-            swipe != null && ctx.fragment == swipe.word -> swipe.word
+            swipe != null && !swipe.spaced && ctx.fragment == swipe.word -> swipe.word
             ctx.fragment.isEmpty() -> null
             else -> autocorrectFor(ctx) ?: ctx.fragment
         }
@@ -369,7 +382,6 @@ class TypingController(private val learned: LearnedWords) {
             remember(word, ctx.previous)
         }
         finishSwipe()
-        phantomSpace = false
         editor.batch {
             if (word != null) {
                 editor.deleteBefore(ctx.fragment.length)
